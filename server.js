@@ -19,6 +19,9 @@ const ADMIN_PIN = process.env.ADMIN_PIN || '2026';
 const ENV_FAUCETPAY_API_KEY = process.env.FAUCETPAY_API_KEY || '';
 const PORT = process.env.PORT || 3000;
 
+// ১ ফুল PEPE টোকেন = 100,000,000 FaucetPay সাতোশি ইউনিট
+const FAUCETPAY_SATOSHI_PER_PEPE = 100000000;
+
 // MongoDB কানেকশন
 mongoose.connect(MONGO_URI)
   .then(async () => {
@@ -32,12 +35,12 @@ const settingsSchema = new mongoose.Schema({
   key: { type: String, unique: true, default: 'global_config' },
   adReward: { type: Number, default: 100 },
   dailyAdLimit: { type: Number, default: 30 },
-  minWithdraw: { type: Number, default: 1000 },
+  minWithdraw: { type: Number, default: 10 },
   faucetpay: {
     enabled: { type: Boolean, default: true },
     apiKey: { type: String, default: '' },
-    minWithdraw: { type: Number, default: 100 },
-    rateMultiplier: { type: Number, default: 1000 }
+    minWithdraw: { type: Number, default: 10 },
+    rateMultiplier: { type: Number, default: 1 }
   },
   binance: {
     enabled: { type: Boolean, default: true },
@@ -85,6 +88,7 @@ const userSchema = new mongoose.Schema({
   lastAdReset: { type: Date, default: Date.now },
   completedTasks: [{ type: String }],
   history: [{
+    refId: { type: String, default: '' },
     type: { type: String },
     detail: { type: String },
     amount: { type: Number },
@@ -94,6 +98,7 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const withdrawalSchema = new mongoose.Schema({
+  refId: { type: String, default: '' },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   username: { type: String, required: true },
   method: { type: String, enum: ['faucetpay', 'binance'], required: true },
@@ -119,6 +124,34 @@ async function ensureDefaultSettings() {
 async function getConfig() {
   await ensureDefaultSettings();
   return Settings.findOne({ key: 'global_config' });
+}
+
+// --- FaucetPay Exact Token Payout Helper ---
+async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultiplier = 1) {
+  const cleanKey = String(apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('অ্যাডমিন প্যানেল বা Render-এ FaucetPay API Key সেট করা নেই!');
+  }
+
+  // যদি কেউ ভুল করে 1000 দিয়ে রাখে, তবে 1 ধরে নেবে যাতে 10 টোকেন = ঠিক 10 PEPE যায়
+  const effectiveMult = (!rateMultiplier || Number(rateMultiplier) === 1000) ? 1 : Number(rateMultiplier);
+  const satoshiAmount = Math.round(Number(pepeTokens) * effectiveMult * FAUCETPAY_SATOSHI_PER_PEPE);
+
+  if (!Number.isFinite(satoshiAmount) || satoshiAmount <= 0) {
+    throw new Error('সঠিক PEPE পরিমাণ দিন!');
+  }
+
+  const params = new URLSearchParams();
+  params.append('api_key', cleanKey);
+  params.append('amount', String(satoshiAmount));
+  params.append('to', String(toAddress).trim());
+  params.append('currency', 'PEPE');
+
+  const fpRes = await axios.post('https://faucetpay.io/api/v1/send', params);
+  if (!fpRes.data || fpRes.data.status !== 200) {
+    throw new Error(fpRes.data?.message || 'FaucetPay পেমেন্ট পাঠানো যায়নি');
+  }
+  return fpRes.data;
 }
 
 // --- User Auth Middleware ---
@@ -263,7 +296,7 @@ app.get('/api/user', auth, async (req, res) => {
     completedTasks: u.completedTasks,
     history: u.history,
     withdrawConfig: {
-      minWithdraw: cfg?.minWithdraw ?? 1000,
+      minWithdraw: cfg?.minWithdraw ?? 10,
       faucetpay: cfg?.faucetpay,
       binance: cfg?.binance
     }
@@ -350,6 +383,7 @@ app.post('/api/tasks/claim', auth, async (req, res) => {
   }
 });
 
+// --- উইথড্র API (FaucetPay Exact 10 PEPE = 10 PEPE + Binance) ---
 app.post('/api/withdraw', auth, async (req, res) => {
   try {
     const { method, address, network, amount } = req.body;
@@ -359,8 +393,8 @@ app.post('/api/withdraw', auth, async (req, res) => {
     const normalizedMethod = String(method || '').toLowerCase() === 'faucetpay' ? 'faucetpay' : 'binance';
 
     const minLimit = normalizedMethod === 'faucetpay'
-      ? Number(cfg?.faucetpay?.minWithdraw || cfg?.minWithdraw || 100)
-      : Number(cfg?.binance?.minWithdraw || cfg?.minWithdraw || 500);
+      ? Number(cfg?.faucetpay?.minWithdraw || 10)
+      : Number(cfg?.binance?.minWithdraw || 500);
 
     if (!address || !withdrawAmount || withdrawAmount < minLimit) {
       return res.status(400).json({ error: `সর্বনিম্ন উইথড্র ${minLimit} PEPE এবং সঠিক একাউন্ট দিন!` });
@@ -369,34 +403,26 @@ app.post('/api/withdraw', auth, async (req, res) => {
       return res.status(400).json({ error: 'আপনার একাউন্টে পর্যাপ্ত PEPE ব্যালেন্স নেই!' });
     }
 
+    const refId = 'wd_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
     let payoutStatus = 'pending';
-    let historyStatus = 'Pending (Binance)';
+    let historyStatus = normalizedMethod === 'faucetpay' ? 'Pending (FaucetPay)' : 'Pending (Binance)';
 
     if (normalizedMethod === 'faucetpay') {
       const fpKey = (cfg?.faucetpay?.apiKey || ENV_FAUCETPAY_API_KEY || '').trim();
       if (cfg?.faucetpay?.enabled && fpKey) {
-        const mult = Number(cfg?.faucetpay?.rateMultiplier) || 1000;
-        const params = new URLSearchParams();
-        params.append('api_key', fpKey);
-        params.append('amount', Math.floor(withdrawAmount * mult));
-        params.append('to', address.trim());
-        params.append('currency', 'PEPE');
-
-        const fpRes = await axios.post('https://faucetpay.io/api/v1/send', params);
-        if (fpRes.data && fpRes.data.status === 200) {
+        try {
+          await sendFaucetPayExactPepe(fpKey, address.trim(), withdrawAmount, cfg?.faucetpay?.rateMultiplier || 1);
           payoutStatus = 'approved';
-          historyStatus = 'Paid (Auto FaucetPay)';
-        } else {
-          return res.status(400).json({ error: 'FaucetPay এরর: ' + (fpRes.data?.message || 'পেমেন্ট পাঠানো যায়নি') });
+          historyStatus = 'Confirmed (Paid via FaucetPay)';
+        } catch (fpErr) {
+          return res.status(400).json({ error: 'FaucetPay এরর: ' + fpErr.message });
         }
-      } else {
-        payoutStatus = 'pending';
-        historyStatus = 'Pending (FaucetPay)';
       }
     }
 
     user.balance -= withdrawAmount;
     user.history.unshift({
+      refId,
       type: 'Withdraw',
       detail: `${normalizedMethod.toUpperCase()} (${address.trim()})`,
       amount: -withdrawAmount,
@@ -405,6 +431,7 @@ app.post('/api/withdraw', auth, async (req, res) => {
     await user.save();
 
     await Withdrawal.create({
+      refId,
       userId: user._id,
       username: user.username,
       method: normalizedMethod,
@@ -416,7 +443,7 @@ app.post('/api/withdraw', auth, async (req, res) => {
 
     res.json({
       message: payoutStatus === 'approved'
-        ? `সফল! ${withdrawAmount} PEPE অটোমেটিক আপনার FaucetPay একাউন্টে পাঠানো হয়েছে।`
+        ? `সফল! ঠিক ${withdrawAmount} PEPE আপনার FaucetPay ওয়ালেটে পাঠানো হয়েছে।`
         : `সফল! আপনার উইথড্র রিকোয়েস্ট (${withdrawAmount} PEPE) গৃহীত হয়েছে।`,
       balance: user.balance
     });
@@ -623,48 +650,118 @@ app.post('/api/admin/withdrawals', requireAdminPin, async (req, res) => {
   try {
     const { username, method, destination, network, amount } = req.body;
     const normalizedMethod = String(method || '').toLowerCase() === 'faucetpay' ? 'faucetpay' : 'binance';
+    const cleanUser = String(username || '').trim();
+    const numAmount = Number(amount) || 0;
+    const refId = 'wd_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
+
+    const matchedUser = await User.findOne({ username: new RegExp('^' + cleanUser + '$', 'i') });
+    let status = 'pending';
+
+    if (normalizedMethod === 'faucetpay') {
+      const cfg = await getConfig();
+      const fpKey = (cfg?.faucetpay?.apiKey || ENV_FAUCETPAY_API_KEY || '').trim();
+      if (cfg?.faucetpay?.enabled && fpKey) {
+        await sendFaucetPayExactPepe(fpKey, destination.trim(), numAmount, cfg?.faucetpay?.rateMultiplier || 1);
+        status = 'approved';
+      }
+    }
+
+    if (matchedUser) {
+      matchedUser.history.unshift({
+        refId,
+        type: 'Withdraw',
+        detail: `${normalizedMethod.toUpperCase()} (${destination.trim()})`,
+        amount: -numAmount,
+        status: status === 'approved' ? 'Confirmed (Paid)' : 'Pending'
+      });
+      await matchedUser.save();
+    }
+
     const withdrawal = await Withdrawal.create({
-      username: String(username || '').trim(),
+      refId,
+      userId: matchedUser ? matchedUser._id : undefined,
+      username: cleanUser,
       method: normalizedMethod,
       destination: String(destination || '').trim(),
       network: String(network || '').trim(),
-      amount: Number(amount) || 0,
-      status: 'pending'
+      amount: numAmount,
+      status
     });
     res.json({ ok: true, withdrawal });
   } catch (err) {
-    res.status(500).json({ ok: false, message: err.message });
+    res.status(400).json({ ok: false, message: err.message });
   }
 });
 
+// --- অ্যাডমিন Approve / Reject করলে ইউজার প্যানেলের History-ও সাথে সাথে আপডেট হবে ---
 app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, res) => {
   try {
     const decision = req.body.decision === 'approved' ? 'approved' : 'rejected';
     const withdrawal = await Withdrawal.findById(req.params.id);
     if (!withdrawal) return res.status(404).json({ ok: false, message: 'রিকোয়েস্ট পাওয়া যায়নি' });
 
-    if (withdrawal.status === 'pending') {
-      withdrawal.status = decision;
-      await withdrawal.save();
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({ ok: false, message: 'এই রিকোয়েস্ট ইতিমধ্যে প্রসেস করা হয়েছে' });
+    }
 
-      if (decision === 'rejected' && withdrawal.userId) {
-        const user = await User.findById(withdrawal.userId);
-        if (user) {
-          user.balance += Number(withdrawal.amount) || 0;
-          user.history.unshift({
-            type: 'Withdraw',
-            detail: 'Withdrawal Rejected (Refund)',
-            amount: Number(withdrawal.amount) || 0,
-            status: 'Refunded'
-          });
-          await user.save();
-        }
+    const cfg = await getConfig();
+    let finalUserHistoryStatus = decision === 'approved' ? 'Confirmed (Approved)' : 'Rejected (Refunded)';
+
+    if (decision === 'approved' && withdrawal.method === 'faucetpay') {
+      const fpKey = (cfg?.faucetpay?.apiKey || ENV_FAUCETPAY_API_KEY || '').trim();
+      await sendFaucetPayExactPepe(fpKey, withdrawal.destination, withdrawal.amount, cfg?.faucetpay?.rateMultiplier || 1);
+      finalUserHistoryStatus = 'Confirmed (Paid via FaucetPay)';
+    }
+
+    withdrawal.status = decision;
+    await withdrawal.save();
+
+    // userId অথবা username দিয়ে ইউজার খুঁজে বের করে তার History আপডেট করা
+    let user = null;
+    if (withdrawal.userId) {
+      user = await User.findById(withdrawal.userId);
+    }
+    if (!user && withdrawal.username) {
+      user = await User.findOne({ username: new RegExp('^' + withdrawal.username.trim() + '$', 'i') });
+    }
+
+    if (user) {
+      if (decision === 'rejected') {
+        user.balance += Number(withdrawal.amount) || 0;
       }
+
+      // প্রথমে refId দিয়ে মিলানো, না পেলে Pending স্ট্যাটাসের ম্যাচিং এন্ট্রি আপডেট করা
+      let histItem = withdrawal.refId
+        ? user.history.find(h => h.refId === withdrawal.refId)
+        : null;
+
+      if (!histItem) {
+        histItem = user.history.find(
+          h => h.type === 'Withdraw'
+            && Math.abs(Number(h.amount)) === Number(withdrawal.amount)
+            && String(h.status || '').toLowerCase().includes('pending')
+        );
+      }
+
+      if (histItem) {
+        histItem.status = finalUserHistoryStatus;
+      } else {
+        user.history.unshift({
+          refId: withdrawal.refId || '',
+          type: 'Withdraw',
+          detail: `${withdrawal.method.toUpperCase()} (${withdrawal.destination})`,
+          amount: decision === 'rejected' ? Number(withdrawal.amount) : -Number(withdrawal.amount),
+          status: finalUserHistoryStatus
+        });
+      }
+
+      user.markModified('history');
+      await user.save();
     }
 
     res.json({ ok: true, withdrawal });
   } catch (err) {
-    res.status(500).json({ ok: false, message: err.message });
+    res.status(400).json({ ok: false, message: err.message });
   }
 });
 
