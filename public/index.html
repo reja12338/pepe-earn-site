@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PepeEarn - Real PEPE Coin Earning Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0b0f19; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; }
+    .pepe-card { background: #131b2e; border: 1px solid #1e293b; }
+    .pepe-btn { background: #16a34a; transition: all 0.2s; }
+    .pepe-btn:hover { background: #15803d; }
+    .pepe-btn:disabled { background: #334155; cursor: not-allowed; opacity: 0.7; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- নেভিগেশন বার -->
+  <nav class="bg-[#0f1626] border-b border-slate-800 px-4 py-3 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🐸</span>
+        <span class="font-bold text-xl text-green-400">PepeEarn</span>
+      </div>
+      <div id="navUserArea" class="hidden flex items-center gap-3">
+        <span class="bg-green-950 text-green-400 border border-green-700 px-3 py-1 rounded-full text-sm font-bold">
+          <span id="navBalance">0</span> PEPE
+        </span>
+        <button onclick="logout()" class="text-xs bg-red-600/20 text-red-400 border border-red-800 px-3 py-1.5 rounded-lg hover:bg-red-600/30">
+          লগআউট
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- নোটিফিকেশন বক্স -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden max-w-sm px-4 py-3 rounded-xl shadow-2xl text-sm font-medium"></div>
+
+  <!-- লগইন ও রেজিস্ট্রেশন সেকশন -->
+  <main id="authSection" class="flex-1 flex items-center justify-center p-4">
+    <div class="pepe-card w-full max-w-md p-6 rounded-2xl shadow-xl">
+      <div class="flex gap-2 mb-6 bg-slate-900 p-1 rounded-xl">
+        <button id="tabLogin" onclick="switchAuth('login')" class="flex-1 py-2 rounded-lg font-semibold bg-green-600 text-white">লগইন</button>
+        <button id="tabRegister" onclick="switchAuth('register')" class="flex-1 py-2 rounded-lg font-semibold text-slate-400">নতুন একাউন্ট</button>
+      </div>
+
+      <!-- লগইন ফর্ম -->
+      <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">ইমেইল</label>
+          <input type="email" id="loginEmail" required placeholder="example@gmail.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">পাসওয়ার্ড</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">একাউন্টে প্রবেশ করুন</button>
+      </form>
+
+      <!-- রেজিস্ট্রেশন ফর্ম -->
+      <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">ইউজারনেম</label>
+          <input type="text" id="regUsername" required placeholder="reja_official" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">ইমেইল</label>
+          <input type="email" id="regEmail" required placeholder="example@gmail.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">পাসওয়ার্ড</label>
+          <input type="password" id="regPassword" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">রেফার কোড (ঐচ্ছিক)</label>
+          <input type="text" id="regRef" placeholder="থাকলে দিন" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+        </div>
+        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">ফ্রি একাউন্ট খুলুন</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- মেইন ইউজার প্যানেল (কোনো ডেমো ডাটা নেই) -->
+  <main id="appSection" class="hidden flex-1 max-w-5xl w-full mx-auto p-4 space-y-6">
+    
+    <!-- ট্যাব মেনু -->
+    <div class="grid grid-cols-4 gap-2 bg-[#131b2e] p-1.5 rounded-2xl border border-slate-800">
+      <button onclick="showTab('dashboard')" id="btn-dashboard" class="tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold">ড্যাশবোর্ড</button>
+      <button onclick="showTab('ads')" id="btn-ads" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">এড দেখুন</button>
+      <button onclick="showTab('tasks')" id="btn-tasks" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">টাস্ক</button>
+      <button onclick="showTab('withdraw')" id="btn-withdraw" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">উইথড্র</button>
+    </div>
+
+    <!-- ১. ড্যাশবোর্ড ট্যাব -->
+    <section id="tab-dashboard" class="space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="pepe-card p-5 rounded-2xl">
+          <p class="text-slate-400 text-xs">বর্তমান ব্যালেন্স</p>
+          <h2 class="text-3xl font-extrabold text-green-400 mt-1"><span id="dashBalance">0</span> PEPE</h2>
+        </div>
+        <div class="pepe-card p-5 rounded-2xl">
+          <p class="text-slate-400 text-xs">আজকের এড লিমিট (২৪ ঘণ্টা)</p>
+          <h2 class="text-2xl font-bold text-white mt-1"><span id="dashAdsCount">0</span> / <span id="dashAdsLimit">30</span></h2>
+        </div>
+        <div class="pepe-card p-5 rounded-2xl">
+          <p class="text-slate-400 text-xs">মোট রেফারেল (<span id="dashRefReward">500</span> PEPE/রেফার)</p>
+          <h2 class="text-2xl font-bold text-yellow-400 mt-1"><span id="dashRefCount">0</span> জন</h2>
+        </div>
+      </div>
+
+      <!-- রেফারেল লিংক বক্স -->
+      <div class="pepe-card p-5 rounded-2xl space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="font-bold text-base text-white">আপনার রেফারেল লিংক</h3>
+          <span class="text-xs bg-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-full">প্রতি রেফারে ৫০০ PEPE</span>
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="refLinkInput" readonly class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none" />
+          <button onclick="copyRefLink()" class="pepe-btn px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">কপি</button>
+        </div>
+      </div>
+
+      <!-- হিস্ট্রি সেকশন -->
+      <div class="pepe-card p-5 rounded-2xl">
+        <h3 class="font-bold text-base text-white mb-4">লেনদেন ও কাজের হিস্ট্রি</h3>
+        <div id="historyList" class="space-y-2 text-sm">
+          <p class="text-slate-500 text-center py-6">এখনো কোনো হিস্ট্রি নেই। কাজ শুরু করলে এখানে দেখাবে।</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ২. এড অপশন (২৪ ঘণ্টায় ৩০টি এড, প্রতি এড ১৫ সেকেন্ড) -->
+    <section id="tab-ads" class="hidden space-y-4">
+      <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h3 class="font-bold text-lg text-white">PTC এড দেখে আয় করুন</h3>
+          <p class="text-xs text-slate-400">প্রতি এডে ১৫ সেকেন্ড অপেক্ষা করতে হবে • প্রতি এড <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
+        </div>
+        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
+          আজকে দেখা হয়েছে: <span id="adTabCount" class="text-green-400 font-bold">0</span> / 30
+        </div>
+      </div>
+
+      <!-- এড লিস্ট -->
+      <div id="adsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- ৩. টাস্ক অপশন (Telegram, YouTube, Facebook) -->
+    <section id="tab-tasks" class="hidden space-y-4">
+      <div class="pepe-card p-5 rounded-2xl">
+        <h3 class="font-bold text-lg text-white">সোশ্যাল টাস্ক (বাধ্যতামূলক ভেরিফিকেশন)</h3>
+        <p class="text-xs text-slate-400 mt-1">প্রথমে লিংকে গিয়ে চ্যানেল জয়েন/সাবস্ক্রাইব করুন, তারপর আপনার ইউজারনেম দিয়ে কয়েন ক্লাইম করুন।</p>
+      </div>
+      <div id="tasksContainer" class="space-y-4"></div>
+    </section>
+
+    <!-- ৪. উইথড্র অপশন (FaucetPay Auto + Binance) -->
+    <section id="tab-withdraw" class="hidden">
+      <div class="pepe-card p-6 rounded-2xl max-w-lg mx-auto space-y-4">
+        <h3 class="font-bold text-lg text-white">কয়েন উইথড্র করুন</h3>
+        <p class="text-xs text-slate-400">FaucetPay-তে সাথে সাথে অটো পেমেন্ট এবং Binance-এ সরাসরি পেমেন্ট নিতে পারবেন। (সর্বনিম্ন ১০০০ PEPE)</p>
+
+        <form onsubmit="handleWithdraw(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">পেমেন্ট মেথড নির্বাচন করুন</label>
+            <select id="withdrawMethod" onchange="updateWithdrawPlaceholder()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none">
+              <option value="FaucetPay">FaucetPay (Instant Auto Payment)</option>
+              <option value="Binance">Binance (Binance Pay ID / BEP20 Address)</option>
+            </select>
+          </div>
+          <div>
+            <label id="addressLabel" class="block text-xs text-slate-400 mb-1">FaucetPay ইমেইল বা PEPE এড্রেস</label>
+            <input type="text" id="withdrawAddress" required placeholder="আপনার FaucetPay ইমেইল দিন" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">কয়েনের পরিমাণ (PEPE)</label>
+            <input type="number" id="withdrawAmount" min="1000" required placeholder="1000" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+          </div>
+          <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">উইথড্র কনফার্ম করুন</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ১৫-সেকেন্ড লাইভ এড ভিউয়ার মডাল -->
+  <div id="adViewerModal" class="fixed inset-0 bg-black/90 z-50 hidden flex flex-col">
+    <div class="bg-slate-900 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <span class="text-sm font-bold text-white" id="viewerAdTitle">এড লোড হচ্ছে...</span>
+        <span id="timerBadge" class="bg-yellow-500/20 text-yellow-400 border border-yellow-600 px-3 py-1 rounded-full text-xs font-bold">
+          অপেক্ষা করুন: <span id="adCountdown">15</span> সেকেন্ড
+        </span>
+      </div>
+      <div class="flex gap-2">
+        <button id="claimAdBtn" disabled onclick="claimAdReward()" class="pepe-btn px-4 py-1.5 rounded-lg text-xs font-bold text-white">
+          ১৫ সেকেন্ড শেষ হলে ক্লাইম করুন
+        </button>
+        <button onclick="closeAdViewer()" class="bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs">বন্ধ করুন</button>
+      </div>
+    </div>
+    <div class="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4">
+      <div class="pepe-card p-8 rounded-2xl max-w-md w-full space-y-4">
+        <div class="text-5xl">🚀</div>
+        <h3 class="text-xl font-bold text-green-400" id="viewerSponsorText">স্পন্সরড বিজ্ঞাপন</h3>
+        <p class="text-sm text-slate-300">বিজ্ঞাপনটি দেখা হচ্ছে। উপরের টাইমার ১৫ সেকেন্ড শেষ হওয়া পর্যন্ত এই পেজে থাকুন, তারপর ব্যাক করে কয়েন ক্লাইম করুন।</p>
+        <a id="viewerExternalLink" href="#" target="_blank" class="inline-block text-xs text-blue-400 underline">নতুন ট্যাবে সাইট ভিজিট করুন ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // এড এবং টাস্কের তালিকা (আপনি এখানে আপনার নিজের লিংক বসাতে পারবেন)
+    const ADS_DATA = [
+      { id: 1, title: 'Crypto Faucet Partner #1', url: 'https://faucetpay.io' },
+      { id: 2, title: 'Pepe Trading Exchange #2', url: 'https://www.binance.com' },
+      { id: 3, title: 'Telegram Earning Channel #3', url: 'https://telegram.org' },
+      { id: 4, title: 'Web3 Airdrop Portal #4', url: 'https://ton.org' }
+    ];
+
+    const TASKS_DATA = [
+      { id: 'tg_join', platform: 'Telegram', title: 'আমাদের অফিসিয়াল Telegram চ্যানেলে জয়েন করুন', reward: 300, url: 'https://t.me/telegram' },
+      { id: 'yt_sub', platform: 'YouTube', title: 'আমাদের YouTube চ্যানেল সাবস্ক্রাইব করুন', reward: 300, url: 'https://youtube.com' },
+      { id: 'fb_follow', platform: 'Facebook', title: 'আমাদের Facebook পেজ ফলো ও লাইক করুন', reward: 250, url: 'https://facebook.com' }
+    ];
+
+    let userData = null;
+    let activeAdTitle = '';
+    let countdownInterval = null;
+    let visitedTasks = {};
+
+    // URL থেকে রেফার কোড ধরা
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('ref')) {
+      document.getElementById('regRef').value = urlParams.get('ref');
+      switchAuth('register');
+    }
+
+    function showToast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `fixed bottom-5 right-5 z-50 max-w-sm px-4 py-3 rounded-xl shadow-2xl text-sm font-medium ${isError ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 4000);
+    }
+
+    function switchAuth(mode) {
+      document.getElementById('loginForm').classList.toggle('hidden', mode !== 'login');
+      document.getElementById('registerForm').classList.toggle('hidden', mode !== 'register');
+      document.getElementById('tabLogin').className = mode === 'login' ? 'flex-1 py-2 rounded-lg font-semibold bg-green-600 text-white' : 'flex-1 py-2 rounded-lg font-semibold text-slate-400';
+      document.getElementById('tabRegister').className = mode === 'register' ? 'flex-1 py-2 rounded-lg font-semibold bg-green-600 text-white' : 'flex-1 py-2 rounded-lg font-semibold text-slate-400';
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('regUsername').value,
+          email: document.getElementById('regEmail').value,
+          password: document.getElementById('regPassword').value,
+          ref: document.getElementById('regRef').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error, true);
+      localStorage.setItem('pepe_token', data.token);
+      showToast(data.message);
+      loadUserData();
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('loginEmail').value,
+          password: document.getElementById('loginPassword').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error, true);
+      localStorage.setItem('pepe_token', data.token);
+      loadUserData();
+    }
+
+    function logout() {
+      localStorage.removeItem('pepe_token');
+      location.reload();
+    }
+
+    async function loadUserData() {
+      const token = localStorage.getItem('pepe_token');
+      if (!token) return;
+
+      const res = await fetch('/api/user', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) {
+        localStorage.removeItem('pepe_token');
+        return;
+      }
+
+      userData = await res.json();
+      document.getElementById('authSection').classList.add('hidden');
+      document.getElementById('appSection').classList.remove('hidden');
+      document.getElementById('navUserArea').classList.remove('hidden');
+
+      // ড্যাশবোর্ড আপডেট
+      document.getElementById('navBalance').textContent = userData.balance;
+      document.getElementById('dashBalance').textContent = userData.balance;
+      document.getElementById('dashAdsCount').textContent = userData.adsWatchedToday;
+      document.getElementById('dashAdsLimit').textContent = userData.dailyAdLimit;
+      document.getElementById('adTabCount').textContent = userData.adsWatchedToday;
+      document.getElementById('dashRefCount').textContent = userData.referralCount;
+      document.getElementById('dashRefReward').textContent = userData.referralReward;
+      document.getElementById('adRewardLabel').textContent = userData.adReward;
+
+      const refUrl = `${window.location.origin}/?ref=${userData.referralCode}`;
+      document.getElementById('refLinkInput').value = refUrl;
+
+      renderHistory();
+      renderAds();
+      renderTasks();
+    }
+
+    function renderHistory() {
+      const box = document.getElementById('historyList');
+      if (!userData.history || userData.history.length === 0) {
+        box.innerHTML = `<p class="text-slate-500 text-center py-6">এখনো কোনো হিস্ট্রি নেই। কাজ শুরু করলে এখানে দেখাবে।</p>`;
+        return;
+      }
+      box.innerHTML = userData.history.map(item => `
+        <div class="flex justify-between items-center bg-slate-900/80 border border-slate-800 p-3 rounded-xl">
+          <div>
+            <p class="font-semibold text-white">${item.detail}</p>
+            <p class="text-xs text-slate-400">${new Date(item.date).toLocaleString('bn-BD')} • <span class="text-green-400">${item.status}</span></p>
+          </div>
+          <span class="font-bold ${item.amount >= 0 ? 'text-green-400' : 'text-red-400'}">
+            ${item.amount >= 0 ? '+' : ''}${item.amount} PEPE
+          </span>
+        </div>
+      `).join('');
+    }
+
+    function renderAds() {
+      const container = document.getElementById('adsContainer');
+      const limitReached = userData.adsWatchedToday >= userData.dailyAdLimit;
+
+      container.innerHTML = ADS_DATA.map(ad => `
+        <div class="pepe-card p-5 rounded-2xl flex justify-between items-center">
+          <div>
+            <h4 class="font-bold text-white">${ad.title}</h4>
+            <p class="text-xs text-slate-400 mt-1">সময়: ১৫ সেকেন্ড • রিওয়ার্ড: <span class="text-green-400 font-bold">${userData.adReward} PEPE</span></p>
+          </div>
+          <button ${limitReached ? 'disabled' : ''} onclick="startAd('${ad.title}', '${ad.url}')" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white">
+            ${limitReached ? 'লিমিট শেষ' : 'এড দেখুন'}
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function startAd(title, url) {
+      activeAdTitle = title;
+      let timeLeft = 15;
+      document.getElementById('viewerAdTitle').textContent = title;
+      document.getElementById('viewerSponsorText').textContent = title;
+      document.getElementById('viewerExternalLink').href = url;
+      document.getElementById('adCountdown').textContent = timeLeft;
+
+      const claimBtn = document.getElementById('claimAdBtn');
+      claimBtn.disabled = true;
+      claimBtn.textContent = 'অপেক্ষা করুন (15s)...';
+
+      document.getElementById('adViewerModal').classList.remove('hidden');
+
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('adCountdown').textContent = timeLeft;
+        claimBtn.textContent = `অপেক্ষা করুন (${timeLeft}s)...`;
+
+        if (timeLeft <= 0) {
+          clearInterval(countdownInterval);
+          claimBtn.disabled = false;
+          claimBtn.textContent = `✅ ব্যাক ও ক্লাইম (${userData.adReward} PEPE)`;
+        }
+      }, 1000);
+    }
+
+    function closeAdViewer() {
+      clearInterval(countdownInterval);
+      document.getElementById('adViewerModal').classList.add('hidden');
+    }
+
+    async function claimAdReward() {
+      const token = localStorage.getItem('pepe_token');
+      const res = await fetch('/api/ads/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ adTitle: activeAdTitle })
+      });
+      const data = await res.json();
+      closeAdViewer();
+      if (!res.ok) return showToast(data.error, true);
+      showToast(data.message);
+      loadUserData();
+    }
+
+    function renderTasks() {
+      const container = document.getElementById('tasksContainer');
+      container.innerHTML = TASKS_DATA.map(task => {
+        const isDone = userData.completedTasks.includes(task.id);
+        return `
+          <div class="pepe-card p-5 rounded-2xl space-y-3">
+            <div class="flex justify-between items-center">
+              <div>
+                <span class="text-xs bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full font-bold">${task.platform}</span>
+                <h4 class="font-bold text-white mt-1">${task.title}</h4>
+              </div>
+              <span class="text-green-400 font-bold text-sm">+${task.reward} PEPE</span>
+            </div>
+            ${isDone ? `
+              <div class="text-xs text-green-400 font-bold bg-green-950/50 border border-green-800 px-3 py-2 rounded-xl">
+                ✅ টাস্ক সম্পন্ন হয়েছে
+              </div>
+            ` : `
+              <div class="flex flex-col sm:flex-row gap-2">
+                <a href="${task.url}" target="_blank" onclick="markTaskVisited('${task.id}')" class="bg-blue-600 hover:bg-blue-700 text-white text-center px-4 py-2 rounded-xl text-xs font-bold">
+                  ১. চ্যানেলে যান ↗
+                </a>
+                <input type="text" id="proof-${task.id}" placeholder="আপনার ${task.platform} ইউজারনেম লিখুন" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none" />
+                <button onclick="claimTask('${task.id}', '${task.title}', ${task.reward})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white">
+                  ২. কয়েন ক্লাইম করুন
+                </button>
+              </div>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function markTaskVisited(taskId) {
+      visitedTasks[taskId] = true;
+    }
+
+    async function claimTask(taskId, taskTitle, reward) {
+      if (!visitedTasks[taskId]) {
+        return showToast('আগে "১. চ্যানেলে যান" বাটনে ক্লিক করে কাজটি সম্পন্ন করুন!', true);
+      }
+      const proof = document.getElementById(`proof-${taskId}`).value;
+      const token = localStorage.getItem('pepe_token');
+
+      const res = await fetch('/api/tasks/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ taskId, taskTitle, reward, proof })
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error, true);
+      showToast(data.message);
+      loadUserData();
+    }
+
+    function updateWithdrawPlaceholder() {
+      const m = document.getElementById('withdrawMethod').value;
+      document.getElementById('addressLabel').textContent = m === 'FaucetPay' ? 'FaucetPay ইমেইল বা PEPE এড্রেস' : 'Binance Pay ID বা BEP20 ওয়ালেট এড্রেস';
+      document.getElementById('withdrawAddress').placeholder = m === 'FaucetPay' ? 'আপনার FaucetPay ইমেইল দিন' : 'আপনার Binance ID / Address দিন';
+    }
+
+    async function handleWithdraw(e) {
+      e.preventDefault();
+      const token = localStorage.getItem('pepe_token');
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          method: document.getElementById('withdrawMethod').value,
+          address: document.getElementById('withdrawAddress').value,
+          amount: document.getElementById('withdrawAmount').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error, true);
+      showToast(data.message);
+      document.getElementById('withdrawAmount').value = '';
+      loadUserData();
+    }
+
+    function showTab(tabName) {
+      ['dashboard', 'ads', 'tasks', 'withdraw'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
+        document.getElementById(`btn-${t}`).className = t === tabName
+          ? 'tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold'
+          : 'tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold';
+      });
+    }
+
+    function copyRefLink() {
+      const input = document.getElementById('refLinkInput');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      showToast('রেফারেল লিংক কপি হয়েছে!');
+    }
+
+    // পেজ লোড হলেই অটো লগইন চেক
+    loadUserData();
+  </script>
+</body>
+</html>
