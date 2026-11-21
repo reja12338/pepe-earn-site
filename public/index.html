@@ -134,7 +134,7 @@
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 class="font-bold text-lg text-white">PTC এড দেখে আয় করুন</h3>
-          <p class="text-xs text-slate-400">এডে ক্লিক করে এড সাইটে ১৫ সেকেন্ড থাকুন, তারপর ফিরে এসে ক্লাইম করুন • ডিফল্ট রিওয়ার্ড: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
+          <p class="text-xs text-slate-400">এডে ক্লিক করে এড সাইটে সময় পার করুন, তারপর ফিরে এসে ক্লাইম করুন • ডিফল্ট রিওয়ার্ড: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
         </div>
         <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
           আজকে দেখা হয়েছে: <span id="adTabCount" class="text-green-400 font-bold">0</span> / <span id="adTabLimit">30</span>
@@ -187,7 +187,6 @@
   <script>
     let userData = null;
     let activeAd = null;
-    let countdownInterval = null;
     let visitedTasks = {};
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -322,27 +321,18 @@
         const reward = Number(ad.rewardPepe) || Number(userData.adReward) || 100;
         const safeTitle = encodeURIComponent(ad.title || 'Sponsored Ad');
         const safeUrl = encodeURIComponent(ad.url || '#');
-        const isCurrent = activeAd && activeAd.adId === ad._id;
-        const isReady = isCurrent && activeAd.completed;
 
         return `
           <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
               <h4 class="font-bold text-white">${ad.title}</h4>
               <p class="text-xs text-slate-400 mt-1">সময়: ${duration} সেকেন্ড • রিওয়ার্ড: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
-              <p id="ad-status-${ad._id}" class="text-xs text-yellow-400 mt-1">${
-                isCurrent && !activeAd.completed
-                  ? `এড সাইটে থাকুন... বাকি ${activeAd.timeLeft} সেকেন্ড`
-                  : isReady
-                  ? `${duration} সেকেন্ড সম্পন্ন! এখন ক্লাইম করতে পারবেন।`
-                  : ''
-              }</p>
             </div>
             <div class="flex gap-2">
               <button ${limitReached ? 'disabled' : ''} onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 ${limitReached ? 'লিমিট শেষ' : 'এড দেখুন'}
               </button>
-              <button id="claim-btn-${ad._id}" ${isReady ? '' : 'disabled'} onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'))" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+              <button onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 ক্লাইম করুন
               </button>
             </div>
@@ -352,50 +342,28 @@
     }
 
     function openAdAndStartTimer(adId, title, url, durationSec, rewardPepe) {
-      if (url && url !== '#') {
-        window.open(url, '_blank', 'noopener,noreferrer');
-      }
-
-      clearInterval(countdownInterval);
-      const totalSec = Number(durationSec) || 15;
       activeAd = {
         adId,
         title,
         rewardPepe: Number(rewardPepe) || 100,
-        timeLeft: totalSec,
-        completed: false
+        requiredSec: Number(durationSec) || 15,
+        startedAt: Date.now()
       };
 
-      const statusEl = document.getElementById(`ad-status-${adId}`);
-      const claimBtn = document.getElementById(`claim-btn-${adId}`);
-      if (statusEl) statusEl.textContent = `এড সাইটে থাকুন... বাকি ${activeAd.timeLeft} সেকেন্ড`;
-      if (claimBtn) claimBtn.disabled = true;
-
-      countdownInterval = setInterval(() => {
-        if (!activeAd || activeAd.adId !== adId) {
-          clearInterval(countdownInterval);
-          return;
-        }
-        activeAd.timeLeft--;
-
-        const liveStatus = document.getElementById(`ad-status-${adId}`);
-        if (liveStatus && activeAd.timeLeft > 0) {
-          liveStatus.textContent = `এড সাইটে থাকুন... বাকি ${activeAd.timeLeft} সেকেন্ড`;
-        }
-
-        if (activeAd.timeLeft <= 0) {
-          clearInterval(countdownInterval);
-          activeAd.completed = true;
-          if (liveStatus) liveStatus.textContent = `${totalSec} সেকেন্ড সম্পন্ন! এখন ক্লাইম করতে পারবেন।`;
-          const liveBtn = document.getElementById(`claim-btn-${adId}`);
-          if (liveBtn) liveBtn.disabled = false;
-        }
-      }, 1000);
+      if (url && url !== '#') {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
     }
 
-    async function claimAdById(adId, adTitle) {
-      if (!activeAd || activeAd.adId !== adId || !activeAd.completed) {
-        return showToast('আগে এডে গিয়ে সময় শেষ হওয়া পর্যন্ত অপেক্ষা করুন!', true);
+    async function claimAdById(adId, adTitle, durationSec) {
+      const requiredSec = Number(durationSec) || 15;
+      if (!activeAd || activeAd.adId !== adId || !activeAd.startedAt) {
+        return showToast(`${requiredSec} সেকেন্ড ওয়েট করতে হবে!`, true);
+      }
+
+      const elapsedSec = Math.floor((Date.now() - activeAd.startedAt) / 1000);
+      if (elapsedSec < requiredSec) {
+        return showToast(`${requiredSec} সেকেন্ড ওয়েট করতে হবে!`, true);
       }
 
       const token = localStorage.getItem('pepe_token');
