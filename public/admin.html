@@ -242,7 +242,7 @@
             <label for="fpApiKey">FaucetPay API Key</label>
             <input id="fpApiKey" type="text" placeholder="Enter FaucetPay API Key" />
             <label for="fpMinWithdraw">Minimum Withdraw (PEPE)</label>
-            <input id="fpMinWithdraw" type="number" min="1" value="100" />
+            <input id="fpMinWithdraw" type="number" min="1" value="10" />
             <label for="fpRate">Rate Multiplier</label>
             <input id="fpRate" type="number" step="0.1" min="0.1" value="1" />
           </div>
@@ -310,6 +310,19 @@
 
       <!-- TAB 2: PTC ADS -->
       <section id="tab-ads" class="panel hidden">
+        <h3 style="margin-top:0;">24h Daily Ad Limit Control</h3>
+        <div class="grid-2">
+          <div>
+            <label for="dailyAdLimitInput">২৪ ঘণ্টায় ইউজার সর্বোচ্চ কয়টি এড দেখতে পারবে? (যেমন: 30, 50, 100)</label>
+            <input id="dailyAdLimitInput" type="number" min="1" value="30" />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button id="saveAdLimitBtn" type="button" class="btn btn-info" style="width:100%;">Save 24h Ad Limit</button>
+          </div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;" />
+
         <h3 style="margin-top:0;">Create Unlimited PTC Ad</h3>
         <form id="adForm" class="grid-2">
           <div>
@@ -406,7 +419,7 @@
           </div>
           <div>
             <label for="refBonus">Referral Bonus (PEPE)</label>
-            <input id="refBonus" type="number" min="0" value="50" />
+            <input id="refBonus" type="number" min="0" value="500" />
           </div>
           <div>
             <label for="secDevice">One Account Per Device</label>
@@ -439,7 +452,8 @@
     function defaultLocalState() {
       return {
         settings: {
-          faucetpay: { enabled: true, apiKey: '', minWithdraw: 100, rateMultiplier: 1 },
+          dailyAdLimit: 30,
+          faucetpay: { enabled: true, apiKey: '', minWithdraw: 10, rateMultiplier: 1 },
           binance: {
             enabled: true,
             minWithdraw: 500,
@@ -447,7 +461,7 @@
             fieldLabel: 'Binance UID / Pay ID',
             fieldPlaceholder: 'Enter your Binance UID or Pay ID'
           },
-          referral: { enabled: true, bonusPepe: 50 },
+          referral: { enabled: true, bonusPepe: 500 },
           security: { oneAccountPerDevice: true, oneAccountPerIp: true }
         },
         ads: [],
@@ -518,9 +532,11 @@
       document.getElementById('statAds').textContent = ads.length;
       document.getElementById('statTasks').textContent = tasks.length;
 
+      document.getElementById('dailyAdLimitInput').value = s.dailyAdLimit ?? 30;
+
       document.getElementById('fpEnabled').value = String(Boolean(s.faucetpay?.enabled));
       document.getElementById('fpApiKey').value = s.faucetpay?.apiKey || '';
-      document.getElementById('fpMinWithdraw').value = s.faucetpay?.minWithdraw ?? 100;
+      document.getElementById('fpMinWithdraw').value = s.faucetpay?.minWithdraw ?? 10;
       document.getElementById('fpRate').value = s.faucetpay?.rateMultiplier ?? 1;
 
       document.getElementById('bnEnabled').value = String(Boolean(s.binance?.enabled));
@@ -533,7 +549,7 @@
       document.getElementById('wdDestination').placeholder = s.binance?.fieldPlaceholder || 'Enter UID or Address';
 
       document.getElementById('refEnabled').value = String(Boolean(s.referral?.enabled));
-      document.getElementById('refBonus').value = s.referral?.bonusPepe ?? 50;
+      document.getElementById('refBonus').value = s.referral?.bonusPepe ?? 500;
       document.getElementById('secDevice').value = String(Boolean(s.security?.oneAccountPerDevice));
       document.getElementById('secIp').value = String(Boolean(s.security?.oneAccountPerIp));
 
@@ -612,12 +628,29 @@
       showToast('ডাটা রিফ্রেশ হয়েছে');
     });
 
+    document.getElementById('saveAdLimitBtn').addEventListener('click', async () => {
+      const nextLimit = Math.max(1, Number(document.getElementById('dailyAdLimitInput').value) || 30);
+      const local = readLocal();
+      local.settings.dailyAdLimit = nextLimit;
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ dailyAdLimit: nextLimit })
+        });
+      } catch {}
+
+      await loadAll();
+      showToast(`২৪ ঘণ্টার এড লিমিট ${nextLimit} সেভ হয়েছে`);
+    });
+
     document.getElementById('savePayoutSettingsBtn').addEventListener('click', async () => {
       const payload = {
         faucetpay: {
           enabled: document.getElementById('fpEnabled').value === 'true',
           apiKey: document.getElementById('fpApiKey').value.trim(),
-          minWithdraw: Number(document.getElementById('fpMinWithdraw').value) || 100,
+          minWithdraw: Number(document.getElementById('fpMinWithdraw').value) || 10,
           rateMultiplier: Number(document.getElementById('fpRate').value) || 1
         },
         binance: {
