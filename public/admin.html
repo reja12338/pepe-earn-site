@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PepeEarn Standalone Admin Panel</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card: #131a26;
+      --card-2: #192232;
+      --border: #263349;
+      --text: #eef3fb;
+      --muted: #93a4bc;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --info: #3b82f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .gate {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .gate-box {
+      width: 100%;
+      max-width: 390px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .hidden { display: none !important; }
+    .topbar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .stat-val {
+      font-size: 24px;
+      font-weight: 700;
+      margin-top: 6px;
+      color: var(--accent);
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      background: var(--card);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 9px 14px;
+      border-radius: 9px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #06210f;
+      border-color: var(--accent);
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 5px;
+      margin-top: 10px;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 14px;
+    }
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-primary { background: var(--accent); color: #05200e; }
+    .btn-info { background: var(--info); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-warn { background: var(--warn); color: #1a1200; }
+    .btn-ghost { background: var(--card-2); color: var(--text); border: 1px solid var(--border); }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .list-item {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .b-pending { background: rgba(245,158,11,.2); color: #fbbf24; }
+    .b-approved { background: rgba(34,197,94,.2); color: #4ade80; }
+    .b-rejected { background: rgba(239,68,68,.2); color: #f87171; }
+    .toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      background: var(--card-2);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 12px 16px;
+      border-radius: 10px;
+      z-index: 99;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+  </style>
+</head>
+<body>
+  <div id="gateScreen" class="gate">
+    <form id="loginForm" class="gate-box">
+      <h2 style="margin:0 0 6px;">Standalone Admin Panel</h2>
+      <p style="margin:0 0 14px; color:var(--muted); font-size:13px;">শুধুমাত্র অ্যাডমিন PIN দিয়ে প্রবেশ করুন।</p>
+      <label for="pinInput">Admin PIN</label>
+      <input id="pinInput" type="password" placeholder="PIN লিখুন (Default: 2026)" required />
+      <div class="row">
+        <button type="submit" class="btn btn-primary" style="width:100%;">Unlock Admin Panel</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="appShell" class="hidden">
+    <header class="topbar">
+      <strong>PEPE ADMIN CONTROL</strong>
+      <div class="row" style="margin:0;">
+        <button id="refreshBtn" type="button" class="btn btn-ghost">Refresh</button>
+        <button id="lockBtn" type="button" class="btn btn-danger">Lock Panel</button>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="stats">
+        <div class="stat-card">
+          <div style="color:var(--muted); font-size:13px;">Active Users</div>
+          <div id="statUsers" class="stat-val">0</div>
+        </div>
+        <div class="stat-card">
+          <div style="color:var(--muted); font-size:13px;">Total PEPE Withdrawn</div>
+          <div id="statWithdrawn" class="stat-val">0</div>
+        </div>
+        <div class="stat-card">
+          <div style="color:var(--muted); font-size:13px;">Total PTC Ads</div>
+          <div id="statAds" class="stat-val">0</div>
+        </div>
+        <div class="stat-card">
+          <div style="color:var(--muted); font-size:13px;">Total Social Tasks</div>
+          <div id="statTasks" class="stat-val">0</div>
+        </div>
+      </section>
+
+      <nav class="tabs">
+        <button type="button" class="tab-btn active" data-tab="payouts">FaucetPay & Binance</button>
+        <button type="button" class="tab-btn" data-tab="ads">PTC Ads (Unlimited)</button>
+        <button type="button" class="tab-btn" data-tab="tasks">Social Tasks (Unlimited)</button>
+        <button type="button" class="tab-btn" data-tab="users">Users</button>
+        <button type="button" class="tab-btn" data-tab="security">Referral & Security</button>
+      </nav>
+
+      <!-- TAB 1: FAUCETPAY & BINANCE -->
+      <section id="tab-payouts" class="panel">
+        <div class="grid-2">
+          <div>
+            <h3 style="margin-top:0;">FaucetPay Auto Payment</h3>
+            <label for="fpEnabled">Auto Payment Status</label>
+            <select id="fpEnabled">
+              <option value="true">Enabled (Auto Payout)</option>
+              <option value="false">Disabled (Manual)</option>
+            </select>
+            <label for="fpApiKey">FaucetPay API Key</label>
+            <input id="fpApiKey" type="text" placeholder="Enter FaucetPay API Key" />
+            <label for="fpMinWithdraw">Minimum Withdraw (PEPE)</label>
+            <input id="fpMinWithdraw" type="number" min="1" value="100" />
+            <label for="fpRate">Rate Multiplier</label>
+            <input id="fpRate" type="number" step="0.1" min="0.1" value="1" />
+          </div>
+
+          <div>
+            <h3 style="margin-top:0;">Binance Withdrawal Controls</h3>
+            <label for="bnEnabled">Binance Withdrawal Status</label>
+            <select id="bnEnabled">
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+            <label for="bnMinWithdraw">Minimum Withdraw (PEPE)</label>
+            <input id="bnMinWithdraw" type="number" min="1" value="500" />
+            <label for="bnInputMode">ইউজার কী দেবে? (Input Requirement)</label>
+            <select id="bnInputMode">
+              <option value="uid">শুধু Binance UID / Pay ID</option>
+              <option value="address_network">শুধু PEPE Address + Network</option>
+              <option value="both">উভয়টি (UID / Address + Network)</option>
+            </select>
+            <label for="bnFieldLabel">ইনপুট লেবেল</label>
+            <input id="bnFieldLabel" type="text" value="Binance UID / Pay ID" />
+            <label for="bnFieldPlaceholder">ইনপুট প্লেসহোল্ডার</label>
+            <input id="bnFieldPlaceholder" type="text" value="Enter your Binance UID or Pay ID" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="savePayoutSettingsBtn" type="button" class="btn btn-primary">Save FaucetPay & Binance Settings</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:22px 0;" />
+
+        <h3 style="margin-top:0;">Create Withdrawal Request</h3>
+        <form id="createWithdrawForm" class="grid-2">
+          <div>
+            <label for="wdUsername">Username</label>
+            <input id="wdUsername" type="text" placeholder="e.g. user01" required />
+          </div>
+          <div>
+            <label for="wdMethod">Method</label>
+            <select id="wdMethod">
+              <option value="binance">Binance</option>
+              <option value="faucetpay">FaucetPay</option>
+            </select>
+          </div>
+          <div>
+            <label id="wdDestLabel" for="wdDestination">Binance UID / Address / FaucetPay Email</label>
+            <input id="wdDestination" type="text" placeholder="Enter UID or Address" required />
+          </div>
+          <div>
+            <label for="wdNetwork">Network (e.g. BEP20)</label>
+            <input id="wdNetwork" type="text" placeholder="BEP20" />
+          </div>
+          <div>
+            <label for="wdAmount">Amount (PEPE)</label>
+            <input id="wdAmount" type="number" min="1" placeholder="500" required />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button type="submit" class="btn btn-info" style="width:100%;">Submit Withdrawal Entry</button>
+          </div>
+        </form>
+
+        <h3 style="margin-top:22px;">Withdrawal Queue</h3>
+        <div id="withdrawalsList"></div>
+      </section>
+
+      <!-- TAB 2: PTC ADS -->
+      <section id="tab-ads" class="panel hidden">
+        <h3 style="margin-top:0;">Create Unlimited PTC Ad</h3>
+        <form id="adForm" class="grid-2">
+          <div>
+            <label for="adTitle">Ad Title</label>
+            <input id="adTitle" type="text" placeholder="Ad Title" required />
+          </div>
+          <div>
+            <label for="adUrl">Target URL</label>
+            <input id="adUrl" type="url" placeholder="https://example.com" required />
+          </div>
+          <div>
+            <label for="adDuration">Timer (Seconds)</label>
+            <input id="adDuration" type="number" min="5" value="15" required />
+          </div>
+          <div>
+            <label for="adReward">Reward (PEPE)</label>
+            <input id="adReward" type="number" min="1" value="25" required />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary">Add PTC Ad</button>
+          </div>
+        </form>
+        <div id="adsList"></div>
+      </section>
+
+      <!-- TAB 3: SOCIAL TASKS -->
+      <section id="tab-tasks" class="panel hidden">
+        <h3 style="margin-top:0;">Create Unlimited Social Task</h3>
+        <form id="taskForm" class="grid-2">
+          <div>
+            <label for="taskPlatform">Platform</label>
+            <select id="taskPlatform">
+              <option value="Telegram">Telegram</option>
+              <option value="YouTube">YouTube</option>
+              <option value="Facebook">Facebook</option>
+            </select>
+          </div>
+          <div>
+            <label for="taskTitle">Task Title</label>
+            <input id="taskTitle" type="text" placeholder="Join Channel / Subscribe / Like" required />
+          </div>
+          <div>
+            <label for="taskLink">Task Link</label>
+            <input id="taskLink" type="url" placeholder="https://t.me/..." required />
+          </div>
+          <div>
+            <label for="taskReward">Reward (PEPE)</label>
+            <input id="taskReward" type="number" min="1" value="50" required />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary">Add Social Task</button>
+          </div>
+        </form>
+        <div id="tasksList"></div>
+      </section>
+
+      <!-- TAB 4: USERS -->
+      <section id="tab-users" class="panel hidden">
+        <h3 style="margin-top:0;">Add User</h3>
+        <form id="userForm" class="grid-2">
+          <div>
+            <label for="newUsername">Username</label>
+            <input id="newUsername" type="text" placeholder="username" required />
+          </div>
+          <div>
+            <label for="newUserBalance">Initial Balance (PEPE)</label>
+            <input id="newUserBalance" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="newDeviceId">Device ID (1 Device = 1 Account)</label>
+            <input id="newDeviceId" type="text" placeholder="device-unique-id" />
+          </div>
+          <div>
+            <label for="newIpAddress">IP / Wi-Fi Address (1 Wi-Fi = 1 Account)</label>
+            <input id="newIpAddress" type="text" placeholder="e.g. 103.xxx.xxx.xxx" />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary">Create User</button>
+          </div>
+        </form>
+        <div id="usersList"></div>
+      </section>
+
+      <!-- TAB 5: REFERRAL & SECURITY -->
+      <section id="tab-security" class="panel hidden">
+        <h3 style="margin-top:0;">Referral & Anti-Multi-Account Security</h3>
+        <div class="grid-2">
+          <div>
+            <label for="refEnabled">Referral System</label>
+            <select id="refEnabled">
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+          </div>
+          <div>
+            <label for="refBonus">Referral Bonus (PEPE)</label>
+            <input id="refBonus" type="number" min="0" value="50" />
+          </div>
+          <div>
+            <label for="secDevice">One Account Per Device</label>
+            <select id="secDevice">
+              <option value="true">Strict ON (1 Device = 1 Account)</option>
+              <option value="false">OFF</option>
+            </select>
+          </div>
+          <div>
+            <label for="secIp">One Account Per Wi-Fi / IP</label>
+            <select id="secIp">
+              <option value="true">Strict ON (1 Wi-Fi/IP = 1 Account)</option>
+              <option value="false">OFF</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <button id="saveSecurityBtn" type="button" class="btn btn-primary">Save Referral & Security</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const LOCAL_KEY = 'pepe_standalone_admin_v1';
+    let adminPin = sessionStorage.getItem('pepe_admin_pin') || '';
+
+    function defaultLocalState() {
+      return {
+        settings: {
+          faucetpay: { enabled: true, apiKey: '', minWithdraw: 100, rateMultiplier: 1 },
+          binance: {
+            enabled: true,
+            minWithdraw: 500,
+            inputMode: 'uid',
+            fieldLabel: 'Binance UID / Pay ID',
+            fieldPlaceholder: 'Enter your Binance UID or Pay ID'
+          },
+          referral: { enabled: true, bonusPepe: 50 },
+          security: { oneAccountPerDevice: true, oneAccountPerIp: true }
+        },
+        ads: [],
+        tasks: [],
+        users: [],
+        withdrawals: []
+      };
+    }
+
+    function readLocal() {
+      try {
+        const raw = localStorage.getItem(LOCAL_KEY);
+        if (!raw) return defaultLocalState();
+        const parsed = JSON.parse(raw);
+        return { ...defaultLocalState(), ...parsed, settings: { ...defaultLocalState().settings, ...(parsed.settings || {}) } };
+      } catch {
+        return defaultLocalState();
+      }
+    }
+
+    function writeLocal(data) {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+    }
+
+    async function tryApi(url, options = {}) {
+      if (!adminPin) throw new Error('PIN required');
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-pin': adminPin,
+          ...(options.headers || {})
+        }
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Local preview mode');
+      }
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message || 'API error');
+      }
+      return data;
+    }
+
+    function applyStateToUI(data) {
+      const users = data.users || [];
+      const withdrawals = data.withdrawals || [];
+      const ads = data.ads || [];
+      const tasks = data.tasks || [];
+      const s = data.settings || defaultLocalState().settings;
+
+      const activeUsers = users.filter(u => u.status !== 'blocked').length;
+      const withdrawnTotal = withdrawals
+        .filter(w => w.status === 'approved')
+        .reduce((sum, w) => sum + Number(w.amount || 0), 0);
+
+      document.getElementById('statUsers').textContent = activeUsers;
+      document.getElementById('statWithdrawn').textContent = withdrawnTotal;
+      document.getElementById('statAds').textContent = ads.length;
+      document.getElementById('statTasks').textContent = tasks.length;
+
+      document.getElementById('fpEnabled').value = String(Boolean(s.faucetpay?.enabled));
+      document.getElementById('fpApiKey').value = s.faucetpay?.apiKey || '';
+      document.getElementById('fpMinWithdraw').value = s.faucetpay?.minWithdraw ?? 100;
+      document.getElementById('fpRate').value = s.faucetpay?.rateMultiplier ?? 1;
+
+      document.getElementById('bnEnabled').value = String(Boolean(s.binance?.enabled));
+      document.getElementById('bnMinWithdraw').value = s.binance?.minWithdraw ?? 500;
+      document.getElementById('bnInputMode').value = s.binance?.inputMode || 'uid';
+      document.getElementById('bnFieldLabel').value = s.binance?.fieldLabel || 'Binance UID / Pay ID';
+      document.getElementById('bnFieldPlaceholder').value = s.binance?.fieldPlaceholder || 'Enter your Binance UID or Pay ID';
+
+      document.getElementById('wdDestLabel').textContent = s.binance?.fieldLabel || 'Binance UID / Address / FaucetPay Email';
+      document.getElementById('wdDestination').placeholder = s.binance?.fieldPlaceholder || 'Enter UID or Address';
+
+      document.getElementById('refEnabled').value = String(Boolean(s.referral?.enabled));
+      document.getElementById('refBonus').value = s.referral?.bonusPepe ?? 50;
+      document.getElementById('secDevice').value = String(Boolean(s.security?.oneAccountPerDevice));
+      document.getElementById('secIp').value = String(Boolean(s.security?.oneAccountPerIp));
+
+      renderWithdrawals(withdrawals);
+      renderAds(ads);
+      renderTasks(tasks);
+      renderUsers(users);
+    }
+
+    async function loadAll() {
+      try {
+        const remote = await tryApi('/api/admin/state');
+        writeLocal(remote);
+        applyStateToUI(remote);
+      } catch {
+        const local = readLocal();
+        applyStateToUI(local);
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pin = document.getElementById('pinInput').value.trim();
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            showToast(data.message || 'ভুল PIN');
+            return;
+          }
+        } else if (pin !== '2026') {
+          showToast('ভুল PIN (Default: 2026)');
+          return;
+        }
+      } catch {
+        if (pin !== '2026') {
+          showToast('ভুল PIN (Default: 2026)');
+          return;
+        }
+      }
+      adminPin = pin;
+      sessionStorage.setItem('pepe_admin_pin', pin);
+      document.getElementById('gateScreen').classList.add('hidden');
+      document.getElementById('appShell').classList.remove('hidden');
+      await loadAll();
+      showToast('অ্যাডমিন প্যানেল আনলক হয়েছে');
+    });
+
+    document.getElementById('lockBtn').addEventListener('click', () => {
+      adminPin = '';
+      sessionStorage.removeItem('pepe_admin_pin');
+      document.getElementById('appShell').classList.add('hidden');
+      document.getElementById('gateScreen').classList.remove('hidden');
+      document.getElementById('pinInput').value = '';
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.tab;
+        document.querySelectorAll('main section.panel').forEach(sec => {
+          sec.classList.toggle('hidden', sec.id !== `tab-${target}`);
+        });
+      });
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+      await loadAll();
+      showToast('ডাটা রিফ্রেশ হয়েছে');
+    });
+
+    document.getElementById('savePayoutSettingsBtn').addEventListener('click', async () => {
+      const payload = {
+        faucetpay: {
+          enabled: document.getElementById('fpEnabled').value === 'true',
+          apiKey: document.getElementById('fpApiKey').value.trim(),
+          minWithdraw: Number(document.getElementById('fpMinWithdraw').value) || 100,
+          rateMultiplier: Number(document.getElementById('fpRate').value) || 1
+        },
+        binance: {
+          enabled: document.getElementById('bnEnabled').value === 'true',
+          minWithdraw: Number(document.getElementById('bnMinWithdraw').value) || 500,
+          inputMode: document.getElementById('bnInputMode').value,
+          fieldLabel: document.getElementById('bnFieldLabel').value.trim() || 'Binance UID / Pay ID',
+          fieldPlaceholder: document.getElementById('bnFieldPlaceholder').value.trim() || 'Enter your Binance UID or Pay ID'
+        }
+      };
+
+      const local = readLocal();
+      local.settings = { ...local.settings, ...payload };
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) });
+      } catch {}
+
+      await loadAll();
+      showToast('FaucetPay ও Binance সেটিংস সেভ হয়েছে');
+    });
+
+    document.getElementById('saveSecurityBtn').addEventListener('click', async () => {
+      const payload = {
+        referral: {
+          enabled: document.getElementById('refEnabled').value === 'true',
+          bonusPepe: Number(document.getElementById('refBonus').value) || 0
+        },
+        security: {
+          oneAccountPerDevice: document.getElementById('secDevice').value === 'true',
+          oneAccountPerIp: document.getElementById('secIp').value === 'true'
+        }
+      };
+
+      const local = readLocal();
+      local.settings = { ...local.settings, ...payload };
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) });
+      } catch {}
+
+      await loadAll();
+      showToast('Referral ও Security সেটিংস সেভ হয়েছে');
+    });
+
+    document.getElementById('createWithdrawForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const entry = {
+        _id: 'wd_' + Date.now(),
+        username: document.getElementById('wdUsername').value.trim(),
+        method: document.getElementById('wdMethod').value,
+        destination: document.getElementById('wdDestination').value.trim(),
+        network: document.getElementById('wdNetwork').value.trim(),
+        amount: Number(document.getElementById('wdAmount').value),
+        status: 'pending'
+      };
+
+      const local = readLocal();
+      if (entry.method === 'faucetpay' && local.settings.faucetpay.enabled && local.settings.faucetpay.apiKey) {
+        entry.status = 'approved';
+      }
+      local.withdrawals = [entry, ...(local.withdrawals || [])];
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/withdrawals', { method: 'POST', body: JSON.stringify(entry) });
+      } catch {}
+
+      e.target.reset();
+      await loadAll();
+      showToast('উইথড্র এন্ট্রি যুক্ত হয়েছে');
+    });
+
+    function renderWithdrawals(items) {
+      const box = document.getElementById('withdrawalsList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">কোনো উইথড্র রিকোয়েস্ট নেই।</p>';
+        return;
+      }
+      box.innerHTML = items.map(w => `
+        <div class="list-item">
+          <div>
+            <strong>${w.username}</strong> • <span style="color:var(--muted);">${String(w.method).toUpperCase()}</span><br/>
+            <span style="font-size:13px;">To: ${w.destination} ${w.network ? `(${w.network})` : ''}</span><br/>
+            <strong>Amount: ${w.amount} PEPE</strong>
+          </div>
+          <div class="row" style="margin:0;">
+            <span class="badge b-${w.status}">${String(w.status).toUpperCase()}</span>
+            ${w.status === 'pending' ? `
+              <button type="button" class="btn btn-primary" onclick="decideWithdraw('${w._id}', 'approved')">Approve</button>
+              <button type="button" class="btn btn-danger" onclick="decideWithdraw('${w._id}', 'rejected')">Reject</button>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.decideWithdraw = async (id, decision) => {
+      const local = readLocal();
+      local.withdrawals = (local.withdrawals || []).map(w => w._id === id ? { ...w, status: decision } : w);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/withdrawals/${id}/decision`, { method: 'PATCH', body: JSON.stringify({ decision }) });
+      } catch {}
+
+      await loadAll();
+      showToast(`Withdrawal ${decision}`);
+    };
+
+    document.getElementById('adForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ad = {
+        _id: 'ad_' + Date.now(),
+        title: document.getElementById('adTitle').value.trim(),
+        url: document.getElementById('adUrl').value.trim(),
+        durationSec: Number(document.getElementById('adDuration').value) || 15,
+        rewardPepe: Number(document.getElementById('adReward').value) || 25
+      };
+
+      const local = readLocal();
+      local.ads = [ad, ...(local.ads || [])];
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/ads', { method: 'POST', body: JSON.stringify(ad) });
+      } catch {}
+
+      e.target.reset();
+      await loadAll();
+      showToast('নতুন PTC এড যুক্ত হয়েছে');
+    });
+
+    function renderAds(items) {
+      const box = document.getElementById('adsList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">কোনো PTC এড নেই।</p>';
+        return;
+      }
+      box.innerHTML = items.map(a => `
+        <div class="list-item">
+          <div>
+            <strong>${a.title}</strong> (${a.durationSec}s • +${a.rewardPepe} PEPE)<br/>
+            <span style="font-size:12px; color:var(--muted);">${a.url}</span>
+          </div>
+          <button type="button" class="btn btn-danger" onclick="deleteAd('${a._id}')">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    window.deleteAd = async (id) => {
+      const local = readLocal();
+      local.ads = (local.ads || []).filter(a => a._id !== id);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/ads/${id}`, { method: 'DELETE' });
+      } catch {}
+
+      await loadAll();
+      showToast('PTC এড ডিলিট হয়েছে');
+    };
+
+    document.getElementById('taskForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const task = {
+        _id: 'task_' + Date.now(),
+        platform: document.getElementById('taskPlatform').value,
+        title: document.getElementById('taskTitle').value.trim(),
+        link: document.getElementById('taskLink').value.trim(),
+        rewardPepe: Number(document.getElementById('taskReward').value) || 50
+      };
+
+      const local = readLocal();
+      local.tasks = [task, ...(local.tasks || [])];
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/tasks', { method: 'POST', body: JSON.stringify(task) });
+      } catch {}
+
+      e.target.reset();
+      await loadAll();
+      showToast('নতুন Social Task যুক্ত হয়েছে');
+    });
+
+    function renderTasks(items) {
+      const box = document.getElementById('tasksList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">কোনো Social Task নেই।</p>';
+        return;
+      }
+      box.innerHTML = items.map(t => `
+        <div class="list-item">
+          <div>
+            <strong>[${t.platform}] ${t.title}</strong> (+${t.rewardPepe} PEPE)<br/>
+            <span style="font-size:12px; color:var(--muted);">${t.link}</span>
+          </div>
+          <button type="button" class="btn btn-danger" onclick="deleteTask('${t._id}')">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    window.deleteTask = async (id) => {
+      const local = readLocal();
+      local.tasks = (local.tasks || []).filter(t => t._id !== id);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/tasks/${id}`, { method: 'DELETE' });
+      } catch {}
+
+      await loadAll();
+      showToast('Social Task ডিলিট হয়েছে');
+    };
+
+    document.getElementById('userForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('newUsername').value.trim();
+      const deviceId = document.getElementById('newDeviceId').value.trim();
+      const ipAddress = document.getElementById('newIpAddress').value.trim();
+      const local = readLocal();
+
+      if (local.settings.security.oneAccountPerDevice && deviceId && local.users.some(u => u.deviceId === deviceId)) {
+        showToast('এই Device ID দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট আছে!');
+        return;
+      }
+      if (local.settings.security.oneAccountPerIp && ipAddress && local.users.some(u => u.ipAddress === ipAddress)) {
+        showToast('এই IP / Wi-Fi দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট আছে!');
+        return;
+      }
+
+      const user = {
+        _id: 'usr_' + Date.now(),
+        username,
+        balance: Number(document.getElementById('newUserBalance').value) || 0,
+        deviceId,
+        ipAddress,
+        status: 'active'
+      };
+
+      local.users = [user, ...(local.users || [])];
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/users', { method: 'POST', body: JSON.stringify(user) });
+      } catch {}
+
+      e.target.reset();
+      await loadAll();
+      showToast('নতুন ইউজার যুক্ত হয়েছে');
+    });
+
+    function renderUsers(items) {
+      const box = document.getElementById('usersList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">কোনো ইউজার নেই।</p>';
+        return;
+      }
+      box.innerHTML = items.map(u => `
+        <div class="list-item">
+          <div>
+            <strong>${u.username}</strong> — Balance: <strong>${u.balance} PEPE</strong> (${u.status})<br/>
+            <span style="font-size:12px; color:var(--muted);">Device: ${u.deviceId || 'N/A'} | IP: ${u.ipAddress || 'N/A'}</span>
+          </div>
+          <div class="row" style="margin:0;">
+            <button type="button" class="btn btn-primary" onclick="adjustBalance('${u._id}', 100)">+100</button>
+            <button type="button" class="btn btn-warn" onclick="adjustBalance('${u._id}', -100)">-100</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleUserStatus('${u._id}', '${u.status === 'active' ? 'blocked' : 'active'}')">
+              ${u.status === 'active' ? 'Block' : 'Unblock'}
+            </button>
+            <button type="button" class="btn btn-danger" onclick="deleteUser('${u._id}')">Remove</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.adjustBalance = async (id, delta) => {
+      const local = readLocal();
+      local.users = (local.users || []).map(u => u._id === id ? { ...u, balance: Math.max(0, Number(u.balance || 0) + delta) } : u);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/users/${id}/balance`, { method: 'PATCH', body: JSON.stringify({ delta }) });
+      } catch {}
+
+      await loadAll();
+      showToast('ব্যালেন্স আপডেট হয়েছে');
+    };
+
+    window.toggleUserStatus = async (id, status) => {
+      const local = readLocal();
+      local.users = (local.users || []).map(u => u._id === id ? { ...u, status } : u);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      } catch {}
+
+      await loadAll();
+      showToast(`User ${status}`);
+    };
+
+    window.deleteUser = async (id) => {
+      const local = readLocal();
+      local.users = (local.users || []).filter(u => u._id !== id);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/users/${id}`, { method: 'DELETE' });
+      } catch {}
+
+      await loadAll();
+      showToast('ইউজার রিমুভ হয়েছে');
+    };
+
+    if (adminPin) {
+      document.getElementById('gateScreen').classList.add('hidden');
+      document.getElementById('appShell').classList.remove('hidden');
+      loadAll();
+    }
+  </script>
+</body>
+</html>
