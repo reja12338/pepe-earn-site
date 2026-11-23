@@ -67,7 +67,7 @@ const adSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const taskSchema = new mongoose.Schema({
-  platform: { type: String, enum: ['Telegram', 'YouTube', 'Facebook'], default: 'Telegram' },
+  platform: { type: String, enum: ['Telegram', 'YouTube', 'Facebook', 'Ad Network'], default: 'Telegram' },
   title: { type: String, required: true },
   link: { type: String, required: true },
   rewardPepe: { type: Number, default: 250 }
