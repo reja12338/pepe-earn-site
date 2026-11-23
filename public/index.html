@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,7 +15,7 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- নেভিগেশন বার -->
+  <!-- Navigation Bar -->
   <nav class="bg-[#0f1626] border-b border-slate-800 px-4 py-3 sticky top-0 z-40">
     <div class="max-w-5xl mx-auto flex justify-between items-center">
       <div class="flex items-center gap-2">
@@ -27,157 +27,157 @@
           <span id="navBalance">0</span> PEPE
         </span>
         <button onclick="logout()" class="text-xs bg-red-600/20 text-red-400 border border-red-800 px-3 py-1.5 rounded-lg hover:bg-red-600/30">
-          লগআউট
+          Logout
         </button>
       </div>
     </div>
   </nav>
 
-  <!-- নোটিফিকেশন বক্স -->
+  <!-- Notification Box -->
   <div id="toast" class="fixed bottom-5 right-5 z-50 hidden max-w-sm px-4 py-3 rounded-xl shadow-2xl text-sm font-medium"></div>
 
-  <!-- লগইন ও রেজিস্ট্রেশন সেকশন -->
+  <!-- Login & Registration Section -->
   <main id="authSection" class="flex-1 flex items-center justify-center p-4">
     <div class="pepe-card w-full max-w-md p-6 rounded-2xl shadow-xl">
       <div class="flex gap-2 mb-6 bg-slate-900 p-1 rounded-xl">
-        <button id="tabLogin" onclick="switchAuth('login')" class="flex-1 py-2 rounded-lg font-semibold bg-green-600 text-white">লগইন</button>
-        <button id="tabRegister" onclick="switchAuth('register')" class="flex-1 py-2 rounded-lg font-semibold text-slate-400">নতুন একাউন্ট</button>
+        <button id="tabLogin" onclick="switchAuth('login')" class="flex-1 py-2 rounded-lg font-semibold bg-green-600 text-white">Login</button>
+        <button id="tabRegister" onclick="switchAuth('register')" class="flex-1 py-2 rounded-lg font-semibold text-slate-400">New Account</button>
       </div>
 
-      <!-- লগইন ফর্ম -->
+      <!-- Login Form -->
       <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
         <div>
-          <label class="block text-xs text-slate-400 mb-1">ইমেইল</label>
+          <label class="block text-xs text-slate-400 mb-1">Email</label>
           <input type="email" id="loginEmail" required placeholder="example@gmail.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">পাসওয়ার্ড</label>
+          <label class="block text-xs text-slate-400 mb-1">Password</label>
           <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
-        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">একাউন্টে প্রবেশ করুন</button>
+        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">Sign In</button>
       </form>
 
-      <!-- রেজিস্ট্রেশন ফর্ম -->
+      <!-- Register Form -->
       <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-4 hidden">
         <div>
-          <label class="block text-xs text-slate-400 mb-1">ইউজারনেম</label>
-          <input type="text" id="regUsername" required placeholder="reja_official" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+          <label class="block text-xs text-slate-400 mb-1">Username</label>
+          <input type="text" id="regUsername" required placeholder="alex_official" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">ইমেইল</label>
+          <label class="block text-xs text-slate-400 mb-1">Email</label>
           <input type="email" id="regEmail" required placeholder="example@gmail.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">পাসওয়ার্ড</label>
+          <label class="block text-xs text-slate-400 mb-1">Password</label>
           <input type="password" id="regPassword" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">রেফার কোড (ঐচ্ছিক)</label>
-          <input type="text" id="regRef" placeholder="থাকলে দিন" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
+          <label class="block text-xs text-slate-400 mb-1">Referral Code (Optional)</label>
+          <input type="text" id="regRef" placeholder="Enter if you have one" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:border-green-500 outline-none" />
         </div>
-        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">ফ্রি একাউন্ট খুলুন</button>
+        <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">Create Free Account</button>
       </form>
     </div>
   </main>
 
-  <!-- মেইন ইউজার প্যানেল -->
+  <!-- Main User Panel -->
   <main id="appSection" class="hidden flex-1 max-w-5xl w-full mx-auto p-4 space-y-6">
 
-    <!-- ট্যাব মেনু -->
+    <!-- Tab Menu -->
     <div class="grid grid-cols-4 gap-2 bg-[#131b2e] p-1.5 rounded-2xl border border-slate-800">
-      <button onclick="showTab('dashboard')" id="btn-dashboard" class="tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold">ড্যাশবোর্ড</button>
-      <button onclick="showTab('ads')" id="btn-ads" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">এড দেখুন</button>
-      <button onclick="showTab('tasks')" id="btn-tasks" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">টাস্ক</button>
-      <button onclick="showTab('withdraw')" id="btn-withdraw" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">উইথড্র</button>
+      <button onclick="showTab('dashboard')" id="btn-dashboard" class="tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold">Dashboard</button>
+      <button onclick="showTab('ads')" id="btn-ads" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">View Ads</button>
+      <button onclick="showTab('tasks')" id="btn-tasks" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">Tasks</button>
+      <button onclick="showTab('withdraw')" id="btn-withdraw" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">Withdraw</button>
     </div>
 
-    <!-- ১. ড্যাশবোর্ড ট্যাব -->
+    <!-- 1. Dashboard Tab -->
     <section id="tab-dashboard" class="space-y-6">
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="pepe-card p-5 rounded-2xl">
-          <p class="text-slate-400 text-xs">বর্তমান ব্যালেন্স</p>
+          <p class="text-slate-400 text-xs">Current Balance</p>
           <h2 class="text-3xl font-extrabold text-green-400 mt-1"><span id="dashBalance">0</span> PEPE</h2>
         </div>
         <div class="pepe-card p-5 rounded-2xl">
-          <p class="text-slate-400 text-xs">আজকের এড লিমিট (২৪ ঘণ্টা)</p>
+          <p class="text-slate-400 text-xs">Today's Ad Limit (24 Hours)</p>
           <h2 class="text-2xl font-bold text-white mt-1"><span id="dashAdsCount">0</span> / <span id="dashAdsLimit">30</span></h2>
         </div>
         <div class="pepe-card p-5 rounded-2xl">
-          <p class="text-slate-400 text-xs">মোট রেফারেল (<span id="dashRefReward">500</span> PEPE/রেফার)</p>
-          <h2 class="text-2xl font-bold text-yellow-400 mt-1"><span id="dashRefCount">0</span> জন</h2>
+          <p class="text-slate-400 text-xs">Total Referrals (<span id="dashRefReward">500</span> PEPE/Ref)</p>
+          <h2 class="text-2xl font-bold text-yellow-400 mt-1"><span id="dashRefCount">0</span> Users</h2>
         </div>
       </div>
 
-      <!-- রেফারেল লিংক বক্স -->
+      <!-- Referral Link Box -->
       <div class="pepe-card p-5 rounded-2xl space-y-3">
         <div class="flex justify-between items-center">
-          <h3 class="font-bold text-base text-white">আপনার রেফারেল লিংক</h3>
-          <span class="text-xs bg-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-full">প্রতি রেফারে <span id="refBadgeReward">500</span> PEPE</span>
+          <h3 class="font-bold text-base text-white">Your Referral Link</h3>
+          <span class="text-xs bg-yellow-500/20 text-yellow-300 px-2.5 py-1 rounded-full"><span id="refBadgeReward">500</span> PEPE per Referral</span>
         </div>
         <div class="flex gap-2">
           <input type="text" id="refLinkInput" readonly class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none" />
-          <button onclick="copyRefLink()" class="pepe-btn px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">কপি</button>
+          <button onclick="copyRefLink()" class="pepe-btn px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap">Copy</button>
         </div>
       </div>
 
-      <!-- হিস্ট্রি সেকশন -->
+      <!-- History Section -->
       <div class="pepe-card p-5 rounded-2xl">
-        <h3 class="font-bold text-base text-white mb-4">লেনদেন ও কাজের হিস্ট্রি</h3>
+        <h3 class="font-bold text-base text-white mb-4">Transaction & Activity History</h3>
         <div id="historyList" class="space-y-2 text-sm">
-          <p class="text-slate-500 text-center py-6">এখনো কোনো হিস্ট্রি নেই। কাজ শুরু করলে এখানে দেখাবে।</p>
+          <p class="text-slate-500 text-center py-6">No history yet. Start earning to see it here.</p>
         </div>
       </div>
     </section>
 
-    <!-- ২. এড অপশন -->
+    <!-- 2. Ads Option -->
     <section id="tab-ads" class="hidden space-y-4">
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h3 class="font-bold text-lg text-white">PTC এড দেখে আয় করুন</h3>
-          <p class="text-xs text-slate-400">এডে ক্লিক করে এড সাইটে সময় পার করুন, তারপর ফিরে এসে ক্লাইম করুন • ডিফল্ট রিওয়ার্ড: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
+          <h3 class="font-bold text-lg text-white">Earn by Viewing PTC Ads</h3>
+          <p class="text-xs text-slate-400">Click an ad, wait on the ad site, then return and claim • Default Reward: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
         </div>
         <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
-          আজকে দেখা হয়েছে: <span id="adTabCount" class="text-green-400 font-bold">0</span> / <span id="adTabLimit">30</span>
+          Watched today: <span id="adTabCount" class="text-green-400 font-bold">0</span> / <span id="adTabLimit">30</span>
         </div>
       </div>
 
-      <!-- লাইভ এড লিস্ট -->
+      <!-- Live Ads List -->
       <div id="adsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
     </section>
 
-    <!-- ৩. টাস্ক অপশন -->
+    <!-- 3. Tasks Option -->
     <section id="tab-tasks" class="hidden space-y-4">
       <div class="pepe-card p-5 rounded-2xl">
-        <h3 class="font-bold text-lg text-white">সোশ্যাল টাস্ক (বাধ্যতামূলক ভেরিফিকেশন)</h3>
-        <p class="text-xs text-slate-400 mt-1">প্রথমে লিংকে গিয়ে চ্যানেল জয়েন/সাবস্ক্রাইব করুন, তারপর আপনার ইউজারনেম দিয়ে কয়েন ক্লাইম করুন।</p>
+        <h3 class="font-bold text-lg text-white">Social Tasks (Mandatory Verification)</h3>
+        <p class="text-xs text-slate-400 mt-1">First open the link to join/subscribe, then enter your username to claim coins.</p>
       </div>
-      <!-- লাইভ টাস্ক লিস্ট -->
+      <!-- Live Tasks List -->
       <div id="tasksContainer" class="space-y-4"></div>
     </section>
 
-    <!-- ৪. উইথড্র অপশন (FaucetPay Auto + Binance) -->
+    <!-- 4. Withdraw Option (FaucetPay Auto + Binance) -->
     <section id="tab-withdraw" class="hidden">
       <div class="pepe-card p-6 rounded-2xl max-w-lg mx-auto space-y-4">
-        <h3 class="font-bold text-lg text-white">কয়েন উইথড্র করুন</h3>
-        <p id="withdrawInfoText" class="text-xs text-slate-400">FaucetPay-তে অটো পেমেন্ট এবং Binance-এ পেমেন্ট নিতে পারবেন।</p>
+        <h3 class="font-bold text-lg text-white">Withdraw Coins</h3>
+        <p id="withdrawInfoText" class="text-xs text-slate-400">You can withdraw via FaucetPay auto payment and Binance.</p>
 
         <form onsubmit="handleWithdraw(event)" class="space-y-4">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">পেমেন্ট মেথড নির্বাচন করুন</label>
+            <label class="block text-xs text-slate-400 mb-1">Select Payment Method</label>
             <select id="withdrawMethod" onchange="updateWithdrawPlaceholder()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none">
               <option value="FaucetPay">FaucetPay (Instant Auto Payment)</option>
               <option value="Binance">Binance (Binance Pay ID / BEP20 Address)</option>
             </select>
           </div>
           <div>
-            <label id="addressLabel" class="block text-xs text-slate-400 mb-1">FaucetPay ইমেইল বা PEPE এড্রেস</label>
-            <input type="text" id="withdrawAddress" required placeholder="আপনার FaucetPay ইমেইল দিন" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+            <label id="addressLabel" class="block text-xs text-slate-400 mb-1">FaucetPay Email or PEPE Address</label>
+            <input type="text" id="withdrawAddress" required placeholder="Enter your FaucetPay email" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1">কয়েনের পরিমাণ (PEPE)</label>
+            <label class="block text-xs text-slate-400 mb-1">Coin Amount (PEPE)</label>
             <input type="number" id="withdrawAmount" min="1" required placeholder="500" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
           </div>
-          <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">উইথড্র কনফার্ম করুন</button>
+          <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">Confirm Withdrawal</button>
         </form>
       </div>
     </section>
@@ -290,14 +290,14 @@
     function renderHistory() {
       const box = document.getElementById('historyList');
       if (!userData.history || userData.history.length === 0) {
-        box.innerHTML = `<p class="text-slate-500 text-center py-6">এখনো কোনো হিস্ট্রি নেই। কাজ শুরু করলে এখানে দেখাবে।</p>`;
+        box.innerHTML = `<p class="text-slate-500 text-center py-6">No history yet. Start earning to see it here.</p>`;
         return;
       }
       box.innerHTML = userData.history.map(item => `
         <div class="flex justify-between items-center bg-slate-900/80 border border-slate-800 p-3 rounded-xl">
           <div>
             <p class="font-semibold text-white">${item.detail}</p>
-            <p class="text-xs text-slate-400">${new Date(item.date).toLocaleString('bn-BD')} • <span class="text-green-400">${item.status}</span></p>
+            <p class="text-xs text-slate-400">${new Date(item.date).toLocaleString('en-US')} • <span class="text-green-400">${item.status}</span></p>
           </div>
           <span class="font-bold ${item.amount >= 0 ? 'text-green-400' : 'text-red-400'}">
             ${item.amount >= 0 ? '+' : ''}${item.amount} PEPE
@@ -312,7 +312,7 @@
       const limitReached = userData.adsWatchedToday >= userData.dailyAdLimit;
 
       if (ads.length === 0) {
-        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">অ্যাডমিন প্যানেল থেকে এখনো কোনো PTC এড যুক্ত করা হয়নি।</div>`;
+        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">No PTC ads have been added from the admin panel yet.</div>`;
         return;
       }
 
@@ -326,14 +326,14 @@
           <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
               <h4 class="font-bold text-white">${ad.title}</h4>
-              <p class="text-xs text-slate-400 mt-1">সময়: ${duration} সেকেন্ড • রিওয়ার্ড: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
+              <p class="text-xs text-slate-400 mt-1">Duration: ${duration} seconds • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
             </div>
             <div class="flex gap-2">
               <button ${limitReached ? 'disabled' : ''} onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
-                ${limitReached ? 'লিমিট শেষ' : 'এড দেখুন'}
+                ${limitReached ? 'Limit Reached' : 'View Ad'}
               </button>
               <button onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
-                ক্লাইম করুন
+                Claim
               </button>
             </div>
           </div>
@@ -358,12 +358,12 @@
     async function claimAdById(adId, adTitle, durationSec) {
       const requiredSec = Number(durationSec) || 15;
       if (!activeAd || activeAd.adId !== adId || !activeAd.startedAt) {
-        return showToast(`${requiredSec} সেকেন্ড ওয়েট করতে হবে!`, true);
+        return showToast(`You must wait ${requiredSec} seconds!`, true);
       }
 
       const elapsedSec = Math.floor((Date.now() - activeAd.startedAt) / 1000);
       if (elapsedSec < requiredSec) {
-        return showToast(`${requiredSec} সেকেন্ড ওয়েট করতে হবে!`, true);
+        return showToast(`You must wait ${requiredSec} seconds!`, true);
       }
 
       const token = localStorage.getItem('pepe_token');
@@ -384,7 +384,7 @@
       const tasks = Array.isArray(userData.tasks) ? userData.tasks : [];
 
       if (tasks.length === 0) {
-        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl text-center text-slate-400 text-sm">অ্যাডমিন প্যানেল থেকে এখনো কোনো সোশ্যাল টাস্ক যুক্ত করা হয়নি।</div>`;
+        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl text-center text-slate-400 text-sm">No social tasks have been added from the admin panel yet.</div>`;
         return;
       }
 
@@ -405,16 +405,16 @@
             </div>
             ${isDone ? `
               <div class="text-xs text-green-400 font-bold bg-green-950/50 border border-green-800 px-3 py-2 rounded-xl">
-                ✅ টাস্ক সম্পন্ন হয়েছে
+                ✅ Task Completed
               </div>
             ` : `
               <div class="flex flex-col sm:flex-row gap-2">
                 <a href="${task.link}" target="_blank" onclick="markTaskVisited('${taskId}')" class="bg-blue-600 hover:bg-blue-700 text-white text-center px-4 py-2 rounded-xl text-xs font-bold">
-                  ১. চ্যানেলে যান ↗
+                  1. Go to Channel ↗
                 </a>
-                <input type="text" id="proof-${taskId}" placeholder="আপনার ${task.platform || ''} ইউজারনেম লিখুন" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none" />
+                <input type="text" id="proof-${taskId}" placeholder="Enter your ${task.platform || ''} username" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none" />
                 <button onclick="claimTask('${taskId}', decodeURIComponent('${safeTitle}'), ${reward})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white">
-                  ২. কয়েন ক্লাইম করুন
+                  2. Claim Coins
                 </button>
               </div>
             `}
@@ -429,7 +429,7 @@
 
     async function claimTask(taskId, taskTitle, reward) {
       if (!visitedTasks[taskId]) {
-        return showToast('আগে "১. চ্যানেলে যান" বাটনে ক্লিক করে কাজটি সম্পন্ন করুন!', true);
+        return showToast('Please click "1. Go to Channel" first and complete the task!', true);
       }
       const proof = document.getElementById(`proof-${taskId}`)?.value || '';
       const token = localStorage.getItem('pepe_token');
@@ -452,17 +452,17 @@
       const bnMin = cfg?.binance?.minWithdraw || cfg?.minWithdraw || 500;
 
       if (m === 'FaucetPay') {
-        document.getElementById('addressLabel').textContent = 'FaucetPay ইমেইল বা PEPE এড্রেস';
-        document.getElementById('withdrawAddress').placeholder = 'আপনার FaucetPay ইমেইল দিন';
+        document.getElementById('addressLabel').textContent = 'FaucetPay Email or PEPE Address';
+        document.getElementById('withdrawAddress').placeholder = 'Enter your FaucetPay email';
         document.getElementById('withdrawAmount').min = fpMin;
         document.getElementById('withdrawAmount').placeholder = String(fpMin);
-        document.getElementById('withdrawInfoText').textContent = `FaucetPay সর্বনিম্ন উইথড্র ${fpMin} PEPE • Binance সর্বনিম্ন ${bnMin} PEPE।`;
+        document.getElementById('withdrawInfoText').textContent = `FaucetPay minimum withdraw is ${fpMin} PEPE • Binance minimum is ${bnMin} PEPE.`;
       } else {
-        document.getElementById('addressLabel').textContent = cfg?.binance?.fieldLabel || 'Binance Pay ID বা BEP20 ওয়ালেট এড্রেস';
-        document.getElementById('withdrawAddress').placeholder = cfg?.binance?.fieldPlaceholder || 'আপনার Binance ID / Address দিন';
+        document.getElementById('addressLabel').textContent = cfg?.binance?.fieldLabel || 'Binance Pay ID or BEP20 Wallet Address';
+        document.getElementById('withdrawAddress').placeholder = cfg?.binance?.fieldPlaceholder || 'Enter your Binance ID / Address';
         document.getElementById('withdrawAmount').min = bnMin;
         document.getElementById('withdrawAmount').placeholder = String(bnMin);
-        document.getElementById('withdrawInfoText').textContent = `Binance সর্বনিম্ন উইথড্র ${bnMin} PEPE • FaucetPay সর্বনিম্ন ${fpMin} PEPE।`;
+        document.getElementById('withdrawInfoText').textContent = `Binance minimum withdraw is ${bnMin} PEPE • FaucetPay minimum is ${fpMin} PEPE.`;
       }
     }
 
@@ -501,7 +501,7 @@
       const input = document.getElementById('refLinkInput');
       input.select();
       navigator.clipboard.writeText(input.value);
-      showToast('রেফারেল লিংক কপি হয়েছে!');
+      showToast('Referral link copied!');
     }
 
     loadUserData();
