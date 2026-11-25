@@ -74,6 +74,7 @@ const adSchema = new mongoose.Schema({
   title: { type: String, required: true },
   url: { type: String, required: true },
   category: { type: String, default: 'PTC' },
+  source: { type: String, enum: ['admin', 'user'], default: 'admin' },
   durationSec: { type: Number, default: 15 },
   rewardPepe: { type: Number, default: 100 },
   viewsTotal: { type: Number, default: 0 },
@@ -334,9 +335,10 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/user', auth, async (req, res) => {
   const u = req.user;
   const cfg = await getConfig();
-  const [ads, myAds, tasks, latestCoupon] = await Promise.all([
-    Ad.find({ status: 'active' }).sort({ createdAt: -1 }),
-    Ad.find({ createdBy: u.username }).sort({ createdAt: -1 }),
+  const [adminAds, ptcAds, myAds, tasks, latestCoupon] = await Promise.all([
+    Ad.find({ status: 'active', source: { $ne: 'user' } }).sort({ createdAt: -1 }),
+    Ad.find({ status: 'active', source: 'user' }).sort({ createdAt: -1 }),
+    Ad.find({ createdBy: u.username, source: 'user' }).sort({ createdAt: -1 }),
     Task.find().sort({ createdAt: -1 }),
     Coupon.findOne({ active: true }).sort({ createdAt: -1 })
   ]);
@@ -372,7 +374,9 @@ app.get('/api/user', auth, async (req, res) => {
     adsWatchedToday: u.adsWatchedToday,
     dailyAdLimit: cfg?.dailyAdLimit ?? 30,
     adReward: cfg?.adReward ?? 100,
-    ads,
+    adminAds,
+    ptcAds,
+    ads: ptcAds,
     myAds,
     tasks,
     completedTasks: u.completedTasks,
@@ -575,6 +579,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       title: cleanTitle,
       url: cleanUrl,
       category: String(category || 'PTC').trim(),
+      source: 'user',
       durationSec: Math.max(5, Number(durationSec) || 15),
       rewardPepe: reward,
       viewsTotal: views,
@@ -635,6 +640,7 @@ app.delete('/api/ads/:id', auth, async (req, res) => {
   }
 });
 
+// --- Claim Ad (24h limit ONLY on admin View Ad; no daily limit on user-promoted PTC Ads) ---
 app.post('/api/ads/claim', auth, async (req, res) => {
   try {
     const { adId, adTitle } = req.body;
@@ -642,12 +648,9 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     const cfg = await getConfig();
     const limit = Number(cfg?.dailyAdLimit) || 30;
 
-    if (user.adsWatchedToday >= limit) {
-      return res.status(400).json({ error: `Daily limit of ${limit} ads reached! Try again in 24 hours.` });
-    }
-
     let reward = Number(cfg?.adReward) || 100;
     let title = adTitle || 'Sponsored Ad';
+    let adSource = 'admin';
 
     if (adId) {
       const foundAd = await Ad.findById(adId);
@@ -655,8 +658,19 @@ app.post('/api/ads/claim', auth, async (req, res) => {
         if (foundAd.status !== 'active') {
           return res.status(400).json({ error: 'This ad campaign is currently not active!' });
         }
+        adSource = foundAd.source === 'user' ? 'user' : 'admin';
         reward = Number(foundAd.rewardPepe) || reward;
         title = foundAd.title;
+      }
+    }
+
+    if (adSource === 'admin' && user.adsWatchedToday >= limit) {
+      return res.status(400).json({ error: `Daily limit of ${limit} ads reached! Try again in 24 hours.` });
+    }
+
+    if (adId) {
+      const foundAd = await Ad.findById(adId);
+      if (foundAd) {
         foundAd.viewsCompleted = Number(foundAd.viewsCompleted || 0) + 1;
         if (Number(foundAd.viewsTotal || 0) > 0 && foundAd.viewsCompleted >= Number(foundAd.viewsTotal)) {
           foundAd.status = 'completed';
@@ -666,10 +680,13 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     }
 
     user.balance += reward;
-    user.adsWatchedToday += 1;
+    if (adSource === 'admin') {
+      user.adsWatchedToday += 1;
+    }
+
     user.history.unshift({
-      type: 'Ad',
-      detail: `PTC Ad (${title})`,
+      type: adSource === 'user' ? 'PTC Ad' : 'View Ad',
+      detail: `${adSource === 'user' ? 'PTC Ad' : 'View Ad'} (${title})`,
       amount: reward,
       status: 'Completed'
     });
@@ -957,9 +974,11 @@ app.post('/api/admin/ads', requireAdminPin, async (req, res) => {
       title,
       url,
       category: category || 'PTC',
+      source: 'admin',
       durationSec: Number(durationSec) || 15,
       rewardPepe: Number(rewardPepe) || 100,
       viewsTotal: Number(viewsTotal) || 0,
+      createdBy: 'admin',
       status: 'active'
     });
     res.json({ ok: true, ad });
