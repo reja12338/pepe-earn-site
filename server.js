@@ -36,6 +36,10 @@ const settingsSchema = new mongoose.Schema({
   adReward: { type: Number, default: 100 },
   dailyAdLimit: { type: Number, default: 30 },
   minWithdraw: { type: Number, default: 10 },
+  signUpBonus: { type: Number, default: 100 },
+  dailyBonusPepe: { type: Number, default: 50 },
+  ptcAdCreateCost: { type: Number, default: 500 },
+  couponChannelLink: { type: String, default: '' },
   faucetpay: {
     enabled: { type: Boolean, default: true },
     apiKey: { type: String, default: '' },
@@ -63,7 +67,9 @@ const adSchema = new mongoose.Schema({
   title: { type: String, required: true },
   url: { type: String, required: true },
   durationSec: { type: Number, default: 15 },
-  rewardPepe: { type: Number, default: 100 }
+  rewardPepe: { type: Number, default: 100 },
+  createdBy: { type: String, default: 'admin' },
+  status: { type: String, enum: ['active', 'pending'], default: 'active' }
 }, { timestamps: true });
 
 const taskSchema = new mongoose.Schema({
@@ -73,11 +79,32 @@ const taskSchema = new mongoose.Schema({
   rewardPepe: { type: Number, default: 250 }
 }, { timestamps: true });
 
+const couponSchema = new mongoose.Schema({
+  code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+  channelLink: { type: String, default: '' },
+  rewardPepe: { type: Number, required: true },
+  maxUses: { type: Number, default: 100 },
+  usedCount: { type: Number, default: 0 },
+  usedBy: [{ type: String }],
+  active: { type: Boolean, default: true }
+}, { timestamps: true });
+
+const depositSchema = new mongoose.Schema({
+  refId: { type: String, default: '' },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  username: { type: String, required: true },
+  method: { type: String, default: 'FaucetPay / Binance' },
+  txId: { type: String, required: true },
+  amount: { type: Number, required: true },
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
+}, { timestamps: true });
+
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   balance: { type: Number, default: 0 },
+  depositBalance: { type: Number, default: 0 },
   status: { type: String, enum: ['active', 'blocked'], default: 'active' },
   deviceId: { type: String, default: '' },
   ipAddress: { type: String, default: '' },
@@ -86,6 +113,7 @@ const userSchema = new mongoose.Schema({
   referralCount: { type: Number, default: 0 },
   adsWatchedToday: { type: Number, default: 0 },
   lastAdReset: { type: Date, default: Date.now },
+  lastDailyBonus: { type: Date, default: null },
   completedTasks: [{ type: String }],
   history: [{
     refId: { type: String, default: '' },
@@ -111,6 +139,8 @@ const withdrawalSchema = new mongoose.Schema({
 const Settings = mongoose.model('Settings', settingsSchema);
 const Ad = mongoose.model('Ad', adSchema);
 const Task = mongoose.model('Task', taskSchema);
+const Coupon = mongoose.model('Coupon', couponSchema);
+const Deposit = mongoose.model('Deposit', depositSchema);
 const User = mongoose.model('User', userSchema);
 const Withdrawal = mongoose.model('Withdrawal', withdrawalSchema);
 
@@ -196,40 +226,52 @@ app.post('/api/register', async (req, res) => {
     const cfg = await getConfig();
 
     if (!username || !email || !password) {
-      return res.status(400).json({ error: 'সবগুলো ঘর পূরণ করুন!' });
+      return res.status(400).json({ error: 'All fields are required!' });
     }
 
     if (cfg?.security?.oneAccountPerDevice && deviceId) {
       const devExists = await User.findOne({ deviceId: String(deviceId).trim() });
       if (devExists) {
-        return res.status(400).json({ error: 'এই ডিভাইস থেকে ইতিমধ্যে একটি একাউন্ট খোলা হয়েছে!' });
+        return res.status(400).json({ error: 'An account already exists on this device!' });
       }
     }
 
     if (cfg?.security?.oneAccountPerIp && clientIp) {
       const ipExists = await User.findOne({ ipAddress: clientIp });
       if (ipExists) {
-        return res.status(400).json({ error: 'এই Wi-Fi / IP নেটওয়ার্ক থেকে ইতিমধ্যে একটি একাউন্ট খোলা হয়েছে!' });
+        return res.status(400).json({ error: 'An account already exists on this network / IP!' });
       }
     }
 
     const existing = await User.findOne({ $or: [{ email: email.toLowerCase().trim() }, { username: username.trim() }] });
     if (existing) {
-      return res.status(400).json({ error: 'এই ইমেইল বা ইউজারনেম আগেই ব্যবহৃত হয়েছে!' });
+      return res.status(400).json({ error: 'Email or username is already registered!' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const referralCode = username.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(100 + Math.random() * 900);
+    const signUpBonus = Number(cfg?.signUpBonus ?? 100);
+    const initialHistory = [];
+
+    if (signUpBonus > 0) {
+      initialHistory.push({
+        type: 'Sign Up Bonus',
+        detail: 'Welcome Sign-Up Bonus',
+        amount: signUpBonus,
+        status: 'Completed'
+      });
+    }
 
     const newUser = new User({
       username: username.trim(),
       email: email.toLowerCase().trim(),
       password: hashedPassword,
-      balance: 0,
+      balance: signUpBonus,
       deviceId: (deviceId || '').trim(),
       ipAddress: clientIp,
       referralCode,
-      referredBy: ref || null
+      referredBy: ref || null,
+      history: initialHistory
     });
 
     if (ref && cfg?.referral?.enabled) {
@@ -240,7 +282,7 @@ app.post('/api/register', async (req, res) => {
         referrer.referralCount += 1;
         referrer.history.unshift({
           type: 'Referral',
-          detail: `রেফার বোনাস (${username})`,
+          detail: `Referral bonus (${username})`,
           amount: bonus,
           status: 'Completed'
         });
@@ -250,9 +292,14 @@ app.post('/api/register', async (req, res) => {
 
     await newUser.save();
     const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, message: 'একাউন্ট তৈরি সফল হয়েছে!' });
+    res.json({
+      token,
+      message: signUpBonus > 0
+        ? `Account created! You received ${signUpBonus} PEPE sign-up bonus.`
+        : 'Account created successfully!'
+    });
   } catch (err) {
-    res.status(500).json({ error: 'সার্ভার এরর: ' + err.message });
+    res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
 
@@ -260,34 +307,49 @@ app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email: (email || '').toLowerCase().trim() });
-    if (!user) return res.status(400).json({ error: 'ইমেইল বা পাসওয়ার্ড ভুল!' });
-    if (user.status === 'blocked') return res.status(403).json({ error: 'আপনার একাউন্ট ব্লক করা হয়েছে!' });
+    if (!user) return res.status(400).json({ error: 'Invalid email or password!' });
+    if (user.status === 'blocked') return res.status(403).json({ error: 'Your account has been blocked!' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: 'ইমেইল বা পাসওয়ার্ড ভুল!' });
+    if (!isMatch) return res.status(400).json({ error: 'Invalid email or password!' });
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token });
   } catch (err) {
-    res.status(500).json({ error: 'লগইন সমস্যা হয়েছে!' });
+    res.status(500).json({ error: 'Login failed!' });
   }
 });
 
 app.get('/api/user', auth, async (req, res) => {
   const u = req.user;
   const cfg = await getConfig();
-  const [ads, tasks] = await Promise.all([
-    Ad.find().sort({ createdAt: -1 }),
-    Task.find().sort({ createdAt: -1 })
+  const [ads, tasks, latestCoupon] = await Promise.all([
+    Ad.find({ status: { $ne: 'pending' } }).sort({ createdAt: -1 }),
+    Task.find().sort({ createdAt: -1 }),
+    Coupon.findOne({ active: true }).sort({ createdAt: -1 })
   ]);
+
+  const now = Date.now();
+  const lastBonusMs = u.lastDailyBonus ? new Date(u.lastDailyBonus).getTime() : 0;
+  const cooldownMs = 24 * 60 * 60 * 1000;
+  const canClaimDailyBonus = !lastBonusMs || (now - lastBonusMs >= cooldownMs);
+  const nextDailyBonusAt = canClaimDailyBonus ? now : lastBonusMs + cooldownMs;
+  const couponChannelLink = String(latestCoupon?.channelLink || cfg?.couponChannelLink || '').trim();
 
   res.json({
     username: u.username,
     email: u.email,
     balance: u.balance,
+    depositBalance: u.depositBalance || 0,
     referralCode: u.referralCode,
     referralCount: u.referralCount,
     referralReward: cfg?.referral?.bonusPepe ?? 500,
+    signUpBonus: cfg?.signUpBonus ?? 100,
+    dailyBonusPepe: cfg?.dailyBonusPepe ?? 50,
+    ptcAdCreateCost: cfg?.ptcAdCreateCost ?? 500,
+    couponChannelLink,
+    canClaimDailyBonus,
+    nextDailyBonusAt,
     adsWatchedToday: u.adsWatchedToday,
     dailyAdLimit: cfg?.dailyAdLimit ?? 30,
     adReward: cfg?.adReward ?? 100,
@@ -303,6 +365,171 @@ app.get('/api/user', auth, async (req, res) => {
   });
 });
 
+app.post('/api/bonus/daily', auth, async (req, res) => {
+  try {
+    const user = req.user;
+    const cfg = await getConfig();
+    const now = new Date();
+    const cooldownMs = 24 * 60 * 60 * 1000;
+
+    if (user.lastDailyBonus && (now - new Date(user.lastDailyBonus)) < cooldownMs) {
+      const remainingSec = Math.ceil((cooldownMs - (now - new Date(user.lastDailyBonus))) / 1000);
+      const hours = Math.floor(remainingSec / 3600);
+      const mins = Math.floor((remainingSec % 3600) / 60);
+      return res.status(400).json({ error: `Daily bonus already claimed! Come back in ${hours}h ${mins}m.` });
+    }
+
+    const reward = Number(cfg?.dailyBonusPepe ?? 50);
+    user.balance += reward;
+    user.lastDailyBonus = now;
+    user.history.unshift({
+      type: 'Daily Bonus',
+      detail: '24h Daily Check-In Bonus',
+      amount: reward,
+      status: 'Completed'
+    });
+    await user.save();
+
+    res.json({
+      message: `Daily bonus claimed! +${reward} PEPE added to your balance.`,
+      balance: user.balance
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to claim daily bonus!' });
+  }
+});
+
+app.post('/api/coupons/redeem', auth, async (req, res) => {
+  try {
+    const rawCode = String(req.body?.code || '').trim().toUpperCase();
+    if (!rawCode) {
+      return res.status(400).json({ error: 'Please enter a coupon code!' });
+    }
+
+    const coupon = await Coupon.findOne({ code: rawCode });
+    if (!coupon || !coupon.active) {
+      return res.status(404).json({ error: 'Invalid or inactive coupon code!' });
+    }
+    if (coupon.usedCount >= coupon.maxUses) {
+      return res.status(400).json({ error: 'This coupon has reached its usage limit!' });
+    }
+    if (Array.isArray(coupon.usedBy) && coupon.usedBy.includes(String(req.user._id))) {
+      return res.status(400).json({ error: 'You have already redeemed this coupon!' });
+    }
+
+    const reward = Number(coupon.rewardPepe) || 0;
+    coupon.usedCount += 1;
+    coupon.usedBy.push(String(req.user._id));
+    await coupon.save();
+
+    req.user.balance += reward;
+    req.user.history.unshift({
+      type: 'Coupon',
+      detail: `Redeemed Coupon (${coupon.code})`,
+      amount: reward,
+      status: 'Completed'
+    });
+    await req.user.save();
+
+    res.json({
+      message: `Coupon ${coupon.code} redeemed! +${reward} PEPE added.`,
+      balance: req.user.balance
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Coupon redemption failed!' });
+  }
+});
+
+app.post('/api/deposit/request', auth, async (req, res) => {
+  try {
+    const { method, txId, amount } = req.body;
+    const numAmount = Number(amount);
+    const cleanTx = String(txId || '').trim();
+
+    if (!cleanTx || !Number.isFinite(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Please enter a valid amount and transaction ID!' });
+    }
+
+    const refId = 'dep_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
+    await Deposit.create({
+      refId,
+      userId: req.user._id,
+      username: req.user.username,
+      method: String(method || 'FaucetPay / Binance').trim(),
+      txId: cleanTx,
+      amount: numAmount,
+      status: 'pending'
+    });
+
+    req.user.history.unshift({
+      refId,
+      type: 'Deposit',
+      detail: `Deposit (${method || 'Wallet'}) - ${cleanTx}`,
+      amount: numAmount,
+      status: 'Pending Approval'
+    });
+    await req.user.save();
+
+    res.json({ message: 'Deposit request submitted! Balance will be credited after admin approval.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to submit deposit request!' });
+  }
+});
+
+app.post('/api/ads/submit', auth, async (req, res) => {
+  try {
+    const { title, url, durationSec, rewardPepe } = req.body;
+    const cfg = await getConfig();
+    const cost = Number(cfg?.ptcAdCreateCost ?? 500);
+
+    const cleanTitle = String(title || '').trim();
+    const cleanUrl = String(url || '').trim();
+    if (!cleanTitle || !cleanUrl) {
+      return res.status(400).json({ error: 'Ad title and target URL are required!' });
+    }
+
+    const totalAvailable = Number(req.user.depositBalance || 0) + Number(req.user.balance || 0);
+    if (totalAvailable < cost) {
+      return res.status(400).json({ error: `Insufficient funds! Creating a PTC ad costs ${cost} PEPE.` });
+    }
+
+    if (Number(req.user.depositBalance || 0) >= cost) {
+      req.user.depositBalance = Number(req.user.depositBalance || 0) - cost;
+    } else {
+      const fromDeposit = Number(req.user.depositBalance || 0);
+      const fromMain = cost - fromDeposit;
+      req.user.depositBalance = 0;
+      req.user.balance = Math.max(0, Number(req.user.balance || 0) - fromMain);
+    }
+
+    req.user.history.unshift({
+      type: 'PTC Advertising',
+      detail: `Submitted Ad: ${cleanTitle}`,
+      amount: -cost,
+      status: 'Active'
+    });
+    await req.user.save();
+
+    const createdAd = await Ad.create({
+      title: cleanTitle,
+      url: cleanUrl,
+      durationSec: Math.max(5, Number(durationSec) || 15),
+      rewardPepe: Math.max(1, Number(rewardPepe) || Number(cfg?.adReward) || 100),
+      createdBy: req.user.username,
+      status: 'active'
+    });
+
+    res.json({
+      message: `Your PTC ad "${cleanTitle}" is now live!`,
+      ad: createdAd,
+      balance: req.user.balance,
+      depositBalance: req.user.depositBalance
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to publish PTC ad!' });
+  }
+});
+
 app.post('/api/ads/claim', auth, async (req, res) => {
   try {
     const { adId, adTitle } = req.body;
@@ -311,7 +538,7 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     const limit = Number(cfg?.dailyAdLimit) || 30;
 
     if (user.adsWatchedToday >= limit) {
-      return res.status(400).json({ error: `আজকের ${limit}টি এডের লিমিট শেষ! ২৪ ঘণ্টা পর আবার দেখুন।` });
+      return res.status(400).json({ error: `Daily limit of ${limit} ads reached! Try again in 24 hours.` });
     }
 
     let reward = Number(cfg?.adReward) || 100;
@@ -329,19 +556,19 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     user.adsWatchedToday += 1;
     user.history.unshift({
       type: 'Ad',
-      detail: `PTC এড দেখা (${title})`,
+      detail: `PTC Ad (${title})`,
       amount: reward,
       status: 'Completed'
     });
 
     await user.save();
     res.json({
-      message: `অভিনন্দন! আপনি ${reward} PEPE পেয়েছেন।`,
+      message: `Congratulations! You earned ${reward} PEPE.`,
       balance: user.balance,
       adsWatchedToday: user.adsWatchedToday
     });
   } catch (err) {
-    res.status(500).json({ error: 'এড ক্লাইম ব্যর্থ হয়েছে!' });
+    res.status(500).json({ error: 'Failed to claim ad reward!' });
   }
 });
 
@@ -351,10 +578,10 @@ app.post('/api/tasks/claim', auth, async (req, res) => {
     const user = req.user;
 
     if (!proof || proof.trim().length < 2) {
-      return res.status(400).json({ error: 'টাস্ক সম্পন্ন করার প্রমাণ (Username/Profile Name) দিন!' });
+      return res.status(400).json({ error: 'Please provide your task proof (Username/Profile Name)!' });
     }
     if (taskId && user.completedTasks.includes(String(taskId))) {
-      return res.status(400).json({ error: 'আপনি এই টাস্কটি আগেই সম্পন্ন করেছেন!' });
+      return res.status(400).json({ error: 'You have already completed this task!' });
     }
 
     let taskReward = Number(reward) || 250;
@@ -377,9 +604,9 @@ app.post('/api/tasks/claim', auth, async (req, res) => {
     });
 
     await user.save();
-    res.json({ message: `টাস্ক ভেরিফাইড! ${taskReward} PEPE যোগ হয়েছে।`, balance: user.balance });
+    res.json({ message: `Task verified! ${taskReward} PEPE credited.`, balance: user.balance });
   } catch (err) {
-    res.status(500).json({ error: 'টাস্ক ক্লাইম সমস্যা হয়েছে!' });
+    res.status(500).json({ error: 'Task claim failed!' });
   }
 });
 
@@ -397,10 +624,10 @@ app.post('/api/withdraw', auth, async (req, res) => {
       : Number(cfg?.binance?.minWithdraw || 500);
 
     if (!address || !withdrawAmount || withdrawAmount < minLimit) {
-      return res.status(400).json({ error: `সর্বনিম্ন উইথড্র ${minLimit} PEPE এবং সঠিক একাউন্ট দিন!` });
+      return res.status(400).json({ error: `Minimum withdrawal is ${minLimit} PEPE and a valid destination is required!` });
     }
     if (user.balance < withdrawAmount) {
-      return res.status(400).json({ error: 'আপনার একাউন্টে পর্যাপ্ত PEPE ব্যালেন্স নেই!' });
+      return res.status(400).json({ error: 'Insufficient PEPE balance!' });
     }
 
     const refId = 'wd_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
@@ -415,7 +642,7 @@ app.post('/api/withdraw', auth, async (req, res) => {
           payoutStatus = 'approved';
           historyStatus = 'Confirmed (Paid via FaucetPay)';
         } catch (fpErr) {
-          return res.status(400).json({ error: 'FaucetPay এরর: ' + fpErr.message });
+          return res.status(400).json({ error: 'FaucetPay Error: ' + fpErr.message });
         }
       }
     }
@@ -443,12 +670,12 @@ app.post('/api/withdraw', auth, async (req, res) => {
 
     res.json({
       message: payoutStatus === 'approved'
-        ? `সফল! ঠিক ${withdrawAmount} PEPE আপনার FaucetPay ওয়ালেটে পাঠানো হয়েছে।`
-        : `সফল! আপনার উইথড্র রিকোয়েস্ট (${withdrawAmount} PEPE) গৃহীত হয়েছে।`,
+        ? `Success! ${withdrawAmount} PEPE has been sent to your FaucetPay wallet.`
+        : `Success! Your withdrawal request (${withdrawAmount} PEPE) has been submitted.`,
       balance: user.balance
     });
   } catch (err) {
-    res.status(500).json({ error: 'উইথড্র প্রসেস ব্যর্থ হয়েছে: ' + err.message });
+    res.status(500).json({ error: 'Withdrawal failed: ' + err.message });
   }
 });
 
@@ -458,17 +685,19 @@ app.post('/api/admin/login', (req, res) => {
   if (String(pin || '') === String(ADMIN_PIN)) {
     return res.json({ ok: true, message: 'Admin unlocked' });
   }
-  return res.status(401).json({ ok: false, message: 'ভুল অ্যাডমিন PIN' });
+  return res.status(401).json({ ok: false, message: 'Invalid Admin PIN' });
 });
 
 app.get('/api/admin/state', requireAdminPin, async (req, res) => {
   try {
-    const [settings, ads, tasks, users, withdrawals] = await Promise.all([
+    const [settings, ads, tasks, users, withdrawals, coupons, deposits] = await Promise.all([
       getConfig(),
       Ad.find().sort({ createdAt: -1 }),
       Task.find().sort({ createdAt: -1 }),
       User.find().sort({ createdAt: -1 }),
-      Withdrawal.find().sort({ createdAt: -1 })
+      Withdrawal.find().sort({ createdAt: -1 }),
+      Coupon.find().sort({ createdAt: -1 }),
+      Deposit.find().sort({ createdAt: -1 })
     ]);
 
     const activeUsersCount = users.filter(u => u.status !== 'blocked').length;
@@ -488,7 +717,9 @@ app.get('/api/admin/state', requireAdminPin, async (req, res) => {
       ads,
       tasks,
       users,
-      withdrawals
+      withdrawals,
+      coupons,
+      deposits
     });
   } catch (err) {
     res.status(500).json({ ok: false, message: err.message });
@@ -497,7 +728,20 @@ app.get('/api/admin/state', requireAdminPin, async (req, res) => {
 
 app.put('/api/admin/settings', requireAdminPin, async (req, res) => {
   try {
-    const { faucetpay, binance, referral, security, adReward, dailyAdLimit, minWithdraw } = req.body;
+    const {
+      faucetpay,
+      binance,
+      referral,
+      security,
+      adReward,
+      dailyAdLimit,
+      minWithdraw,
+      signUpBonus,
+      dailyBonusPepe,
+      ptcAdCreateCost,
+      couponChannelLink
+    } = req.body;
+
     const updateDoc = {};
     if (faucetpay) updateDoc.faucetpay = faucetpay;
     if (binance) updateDoc.binance = binance;
@@ -506,6 +750,10 @@ app.put('/api/admin/settings', requireAdminPin, async (req, res) => {
     if (adReward !== undefined) updateDoc.adReward = Number(adReward);
     if (dailyAdLimit !== undefined) updateDoc.dailyAdLimit = Number(dailyAdLimit);
     if (minWithdraw !== undefined) updateDoc.minWithdraw = Number(minWithdraw);
+    if (signUpBonus !== undefined) updateDoc.signUpBonus = Number(signUpBonus);
+    if (dailyBonusPepe !== undefined) updateDoc.dailyBonusPepe = Number(dailyBonusPepe);
+    if (ptcAdCreateCost !== undefined) updateDoc.ptcAdCreateCost = Number(ptcAdCreateCost);
+    if (couponChannelLink !== undefined) updateDoc.couponChannelLink = String(couponChannelLink || '').trim();
 
     const updated = await Settings.findOneAndUpdate(
       { key: 'global_config' },
@@ -515,6 +763,73 @@ app.put('/api/admin/settings', requireAdminPin, async (req, res) => {
     res.json({ ok: true, settings: updated });
   } catch (err) {
     res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/coupons', requireAdminPin, async (req, res) => {
+  try {
+    const { code, channelLink, rewardPepe, maxUses } = req.body;
+    const cleanLink = String(channelLink || '').trim();
+    const coupon = await Coupon.create({
+      code: String(code || '').trim().toUpperCase(),
+      channelLink: cleanLink,
+      rewardPepe: Number(rewardPepe) || 100,
+      maxUses: Number(maxUses) || 100,
+      active: true
+    });
+    if (cleanLink) {
+      await Settings.findOneAndUpdate(
+        { key: 'global_config' },
+        { $set: { couponChannelLink: cleanLink } },
+        { upsert: true }
+      );
+    }
+    res.json({ ok: true, coupon });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: err.message });
+  }
+});
+
+app.delete('/api/admin/coupons/:id', requireAdminPin, async (req, res) => {
+  try {
+    await Coupon.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+app.patch('/api/admin/deposits/:id/decision', requireAdminPin, async (req, res) => {
+  try {
+    const decision = req.body.decision === 'approved' ? 'approved' : 'rejected';
+    const deposit = await Deposit.findById(req.params.id);
+    if (!deposit) return res.status(404).json({ ok: false, message: 'Deposit not found' });
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({ ok: false, message: 'Deposit already processed' });
+    }
+
+    deposit.status = decision;
+    await deposit.save();
+
+    const user = deposit.userId
+      ? await User.findById(deposit.userId)
+      : await User.findOne({ username: new RegExp('^' + String(deposit.username || '').trim() + '$', 'i') });
+
+    if (user) {
+      if (decision === 'approved') {
+        user.depositBalance = Number(user.depositBalance || 0) + Number(deposit.amount || 0);
+      }
+      const histItem = deposit.refId ? user.history.find(h => h.refId === deposit.refId) : null;
+      if (histItem) {
+        histItem.status = decision === 'approved' ? 'Approved (Credited)' : 'Rejected';
+      }
+      user.markModified('history');
+      await user.save();
+    }
+
+    res.json({ ok: true, deposit });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: err.message });
   }
 });
 
