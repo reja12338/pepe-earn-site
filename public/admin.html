@@ -312,18 +312,22 @@
 
       <!-- TAB 2: PTC ADS -->
       <section id="tab-ads" class="panel hidden">
-        <h3 style="margin-top:0;">24h Daily Ad Limit & PTC Advertising Cost</h3>
+        <h3 style="margin-top:0;">24h Daily Ad Limit, PTC Cost & Balance Transfer Limit</h3>
         <div class="grid-2">
           <div>
             <label for="dailyAdLimitInput">Daily Ad Limit (24 Hours)</label>
             <input id="dailyAdLimitInput" type="number" min="1" value="30" />
           </div>
           <div>
-            <label for="ptcAdCreateCostInput">User PTC Ad Creation Cost (PEPE)</label>
+            <label for="ptcAdCreateCostInput">Minimum PTC Ad Cost (PEPE)</label>
             <input id="ptcAdCreateCostInput" type="number" min="0" value="500" />
           </div>
+          <div>
+            <label for="minTransferPepeInput">Minimum Main-to-Deposit Transfer (PEPE)</label>
+            <input id="minTransferPepeInput" type="number" min="1" value="100" />
+          </div>
           <div style="grid-column: 1 / -1;">
-            <button id="saveAdLimitBtn" type="button" class="btn btn-info">Save Ad Limit & Cost</button>
+            <button id="saveAdLimitBtn" type="button" class="btn btn-info">Save Ad & Transfer Settings</button>
           </div>
         </div>
 
@@ -436,6 +440,31 @@
 
       <!-- TAB 5: DEPOSITS -->
       <section id="tab-deposits" class="panel hidden">
+        <h3 style="margin-top:0;">Admin Deposit Addresses & USD Conversion Rate</h3>
+        <div class="grid-2">
+          <div>
+            <label for="depFaucetpayAddr">FaucetPay Deposit Email / Address</label>
+            <input id="depFaucetpayAddr" type="text" placeholder="Enter your FaucetPay email or address" />
+          </div>
+          <div>
+            <label for="depBinanceAddr">Binance Deposit UID / Pay ID / Address</label>
+            <input id="depBinanceAddr" type="text" placeholder="Enter your Binance UID or deposit address" />
+          </div>
+          <div>
+            <label for="depPepeAddr">PEPE Coin Deposit Address</label>
+            <input id="depPepeAddr" type="text" placeholder="Enter your PEPE wallet address" />
+          </div>
+          <div>
+            <label for="depPepePerUsd">Conversion Rate (PEPE per $1 USD)</label>
+            <input id="depPepePerUsd" type="number" min="1" value="100000" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="saveDepositConfigBtn" type="button" class="btn btn-primary">Save Deposit Addresses & Rate</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:22px 0;" />
+
         <h3 style="margin-top:0;">User Deposit Requests</h3>
         <div id="depositsList"></div>
       </section>
@@ -517,7 +546,14 @@
           signUpBonus: 100,
           dailyBonusPepe: 50,
           ptcAdCreateCost: 500,
+          minTransferPepe: 100,
           couponChannelLink: '',
+          depositConfig: {
+            faucetpayAddress: '',
+            binanceAddress: '',
+            pepeAddress: '',
+            pepePerUsd: 100000
+          },
           faucetpay: { enabled: true, apiKey: '', minWithdraw: 10, rateMultiplier: 1 },
           binance: {
             enabled: true,
@@ -543,7 +579,18 @@
         const raw = localStorage.getItem(LOCAL_KEY);
         if (!raw) return defaultLocalState();
         const parsed = JSON.parse(raw);
-        return { ...defaultLocalState(), ...parsed, settings: { ...defaultLocalState().settings, ...(parsed.settings || {}) } };
+        return {
+          ...defaultLocalState(),
+          ...parsed,
+          settings: {
+            ...defaultLocalState().settings,
+            ...(parsed.settings || {}),
+            depositConfig: {
+              ...defaultLocalState().settings.depositConfig,
+              ...((parsed.settings && parsed.settings.depositConfig) || {})
+            }
+          }
+        };
       } catch {
         return defaultLocalState();
       }
@@ -603,9 +650,15 @@
 
       document.getElementById('dailyAdLimitInput').value = s.dailyAdLimit ?? 30;
       document.getElementById('ptcAdCreateCostInput').value = s.ptcAdCreateCost ?? 500;
+      document.getElementById('minTransferPepeInput').value = s.minTransferPepe ?? 100;
       document.getElementById('signUpBonusInput').value = s.signUpBonus ?? 100;
       document.getElementById('dailyBonusPepeInput').value = s.dailyBonusPepe ?? 50;
       document.getElementById('defaultCouponChannelInput').value = s.couponChannelLink || '';
+
+      document.getElementById('depFaucetpayAddr').value = s.depositConfig?.faucetpayAddress || '';
+      document.getElementById('depBinanceAddr').value = s.depositConfig?.binanceAddress || '';
+      document.getElementById('depPepeAddr').value = s.depositConfig?.pepeAddress || '';
+      document.getElementById('depPepePerUsd').value = s.depositConfig?.pepePerUsd ?? 100000;
 
       document.getElementById('fpEnabled').value = String(Boolean(s.faucetpay?.enabled));
       document.getElementById('fpApiKey').value = s.faucetpay?.apiKey || '';
@@ -706,20 +759,49 @@
     document.getElementById('saveAdLimitBtn').addEventListener('click', async () => {
       const nextLimit = Math.max(1, Number(document.getElementById('dailyAdLimitInput').value) || 30);
       const nextCost = Math.max(0, Number(document.getElementById('ptcAdCreateCostInput').value) || 0);
+      const nextMinTransfer = Math.max(1, Number(document.getElementById('minTransferPepeInput').value) || 100);
       const local = readLocal();
       local.settings.dailyAdLimit = nextLimit;
       local.settings.ptcAdCreateCost = nextCost;
+      local.settings.minTransferPepe = nextMinTransfer;
       writeLocal(local);
 
       try {
         await tryApi('/api/admin/settings', {
           method: 'PUT',
-          body: JSON.stringify({ dailyAdLimit: nextLimit, ptcAdCreateCost: nextCost })
+          body: JSON.stringify({
+            dailyAdLimit: nextLimit,
+            ptcAdCreateCost: nextCost,
+            minTransferPepe: nextMinTransfer
+          })
         });
       } catch {}
 
       await loadAll();
-      showToast('Ad limit and PTC cost saved');
+      showToast('Ad & transfer settings saved');
+    });
+
+    document.getElementById('saveDepositConfigBtn').addEventListener('click', async () => {
+      const depositConfig = {
+        faucetpayAddress: document.getElementById('depFaucetpayAddr').value.trim(),
+        binanceAddress: document.getElementById('depBinanceAddr').value.trim(),
+        pepeAddress: document.getElementById('depPepeAddr').value.trim(),
+        pepePerUsd: Math.max(1, Number(document.getElementById('depPepePerUsd').value) || 100000)
+      };
+
+      const local = readLocal();
+      local.settings.depositConfig = depositConfig;
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ depositConfig })
+        });
+      } catch {}
+
+      await loadAll();
+      showToast('Deposit addresses & rate saved');
     });
 
     document.getElementById('saveBonusSettingsBtn').addEventListener('click', async () => {
@@ -807,7 +889,7 @@
       box.innerHTML = items.map(d => `
         <div class="list-item">
           <div>
-            <strong>${d.username}</strong> • <span style="color:var(--muted);">${d.method || 'Wallet'}</span><br/>
+            <strong>${d.username}</strong> • <span style="color:var(--muted);">${d.method || 'Wallet'}${d.usdAmount ? ` ($${d.usdAmount})` : ''}</span><br/>
             <span style="font-size:13px;">TxID: ${d.txId}</span><br/>
             <strong>Amount: ${d.amount} PEPE</strong>
           </div>
