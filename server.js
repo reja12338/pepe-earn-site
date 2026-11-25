@@ -22,6 +22,14 @@ const PORT = process.env.PORT || 3000;
 // ১ ফুল PEPE টোকেন = 100,000,000 FaucetPay সাতোশি ইউনিট
 const FAUCETPAY_SATOSHI_PER_PEPE = 100000000;
 
+// নির্ধারিত PTC টাইম ও রিওয়ার্ড টেবিল
+const PTC_TIER_REWARDS = {
+  10: 50,
+  15: 80,
+  30: 100,
+  60: 120
+};
+
 // MongoDB কানেকশন
 mongoose.connect(MONGO_URI)
   .then(async () => {
@@ -45,7 +53,8 @@ const settingsSchema = new mongoose.Schema({
     faucetpayAddress: { type: String, default: '' },
     binanceAddress: { type: String, default: '' },
     pepeAddress: { type: String, default: '' },
-    pepePerUsd: { type: Number, default: 100000 }
+    pepePerUsd: { type: Number, default: 100000 },
+    minDepositUsd: { type: Number, default: 1 }
   },
   faucetpay: {
     enabled: { type: Boolean, default: true },
@@ -366,7 +375,8 @@ app.get('/api/user', auth, async (req, res) => {
       faucetpayAddress: '',
       binanceAddress: '',
       pepeAddress: '',
-      pepePerUsd: 100000
+      pepePerUsd: 100000,
+      minDepositUsd: 1
     },
     couponChannelLink,
     canClaimDailyBonus,
@@ -503,11 +513,17 @@ app.post('/api/deposit/request', auth, async (req, res) => {
     const { method, usdAmount, txId, amount } = req.body;
     const cfg = await getConfig();
     const pepePerUsd = Math.max(1, Number(cfg?.depositConfig?.pepePerUsd ?? 100000));
+    const minDepositUsd = Math.max(0, Number(cfg?.depositConfig?.minDepositUsd ?? 1));
     const parsedUsd = Math.max(0, Number(usdAmount) || 0);
     let numAmount = Number(amount) || 0;
 
     if (!numAmount && parsedUsd > 0) {
       numAmount = Math.round(parsedUsd * pepePerUsd);
+    }
+
+    const effectiveUsd = parsedUsd > 0 ? parsedUsd : (numAmount / pepePerUsd);
+    if (minDepositUsd > 0 && effectiveUsd < minDepositUsd) {
+      return res.status(400).json({ error: `Minimum deposit amount is $${minDepositUsd} USD!` });
     }
 
     const cleanTx = String(txId || '').trim();
@@ -542,11 +558,10 @@ app.post('/api/deposit/request', auth, async (req, res) => {
   }
 });
 
-// --- User PTC Ad Submit (Strictly from depositBalance) ---
+// --- User PTC Ad Submit (Fixed Timer -> Fixed Viewer Reward, Strictly from depositBalance) ---
 app.post('/api/ads/submit', auth, async (req, res) => {
   try {
-    const { title, url, category, durationSec, rewardPepe, viewsTotal } = req.body;
-    const cfg = await getConfig();
+    const { title, url, category, durationSec, viewsTotal } = req.body;
 
     const cleanTitle = String(title || '').trim();
     const cleanUrl = String(url || '').trim();
@@ -554,10 +569,14 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       return res.status(400).json({ error: 'Ad title and target URL are required!' });
     }
 
-    const reward = Math.max(1, Number(rewardPepe) || Number(cfg?.adReward) || 100);
+    const duration = Number(durationSec);
+    if (!PTC_TIER_REWARDS[duration]) {
+      return res.status(400).json({ error: 'Invalid Time selection! Choose 10, 15, 30, or 60 seconds.' });
+    }
+
+    const reward = PTC_TIER_REWARDS[duration];
     const views = Math.max(1, Number(viewsTotal) || 1);
-    const baseCost = Number(cfg?.ptcAdCreateCost ?? 500);
-    const cost = views > 1 ? reward * views : Math.max(reward * views, baseCost);
+    const cost = reward * views;
 
     const currentDeposit = Number(req.user.depositBalance || 0);
     if (currentDeposit < cost) {
@@ -569,7 +588,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     req.user.depositBalance = currentDeposit - cost;
     req.user.history.unshift({
       type: 'PTC Advertising',
-      detail: `Campaign: ${cleanTitle} (${views} views)`,
+      detail: `Campaign: ${cleanTitle} (${duration}s • ${reward} PEPE/view • ${views} views)`,
       amount: -cost,
       status: 'Active'
     });
@@ -580,7 +599,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       url: cleanUrl,
       category: String(category || 'PTC').trim(),
       source: 'user',
-      durationSec: Math.max(5, Number(durationSec) || 15),
+      durationSec: duration,
       rewardPepe: reward,
       viewsTotal: views,
       viewsCompleted: 0,
@@ -659,7 +678,9 @@ app.post('/api/ads/claim', auth, async (req, res) => {
           return res.status(400).json({ error: 'This ad campaign is currently not active!' });
         }
         adSource = foundAd.source === 'user' ? 'user' : 'admin';
-        reward = Number(foundAd.rewardPepe) || reward;
+        reward = adSource === 'user'
+          ? (PTC_TIER_REWARDS[Number(foundAd.durationSec)] || Number(foundAd.rewardPepe) || reward)
+          : (Number(foundAd.rewardPepe) || reward);
         title = foundAd.title;
       }
     }
