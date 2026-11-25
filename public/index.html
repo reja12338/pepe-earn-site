@@ -306,16 +306,15 @@
         <form onsubmit="handleDepositRequest(event)" class="space-y-4">
           <div>
             <label class="block text-xs text-slate-400 mb-1">Deposit Method</label>
-            <select id="depositMethod" onchange="updateDepositAddressBox()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none">
+            <select id="depositMethod" onchange="updateDepositMethodUI()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none">
               <option value="FaucetPay">FaucetPay</option>
               <option value="Binance">Binance</option>
-              <option value="PEPE Coin">PEPE Coin</option>
             </select>
           </div>
 
           <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-1">
             <div class="flex justify-between items-center">
-              <span class="text-xs text-slate-400">Send Payment To Admin Address:</span>
+              <span id="adminDepositAddressLabel" class="text-xs text-slate-400">Send Payment To FaucetPay Address / Email:</span>
               <button type="button" onclick="copyDepositAddress()" class="text-xs text-green-400 font-bold hover:underline">Copy</button>
             </div>
             <p id="adminDepositAddressText" class="text-xs sm:text-sm font-mono text-green-300 break-all">Not set by admin yet</p>
@@ -333,8 +332,9 @@
           </div>
 
           <div>
-            <label class="block text-xs text-slate-400 mb-1">Transaction ID / Hash</label>
-            <input type="text" id="depositTxId" required placeholder="Enter Transaction ID / Hash" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+            <label id="depositProofLabel" class="block text-xs text-slate-400 mb-1">FaucetPay Email / Username / Payment ID</label>
+            <input type="text" id="depositTxId" required placeholder="Enter FaucetPay email, username, or transaction ID" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+            <p id="depositProofHint" class="text-[11px] text-slate-400 mt-1">Enter the FaucetPay email/username you sent from or your FaucetPay transaction ID.</p>
           </div>
           <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">Submit Deposit Request</button>
         </form>
@@ -502,7 +502,7 @@
       document.getElementById('refLinkInput').value = refUrl;
 
       syncFixedRewardFromTime();
-      updateDepositAddressBox();
+      updateDepositMethodUI();
       updateWithdrawPlaceholder();
       renderHistory();
       renderAds();
@@ -544,16 +544,28 @@
       if (el) el.textContent = `${total} PEPE`;
     }
 
-    function updateDepositAddressBox() {
+    function updateDepositMethodUI() {
       const method = document.getElementById('depositMethod')?.value || 'FaucetPay';
       const dc = userData?.depositConfig || {};
-      let addr = '';
-      if (method === 'FaucetPay') addr = dc.faucetpayAddress || dc.pepeAddress || '';
-      else if (method === 'Binance') addr = dc.binanceAddress || dc.pepeAddress || '';
-      else addr = dc.pepeAddress || dc.binanceAddress || dc.faucetpayAddress || '';
+      const addrEl = document.getElementById('adminDepositAddressText');
+      const addrLabelEl = document.getElementById('adminDepositAddressLabel');
+      const proofLabelEl = document.getElementById('depositProofLabel');
+      const proofInputEl = document.getElementById('depositTxId');
+      const proofHintEl = document.getElementById('depositProofHint');
 
-      const el = document.getElementById('adminDepositAddressText');
-      if (el) el.textContent = addr.trim() || 'Not set by admin yet';
+      if (method === 'Binance') {
+        if (addrLabelEl) addrLabelEl.textContent = 'Send Payment To Binance UID / Pay ID / Address:';
+        if (addrEl) addrEl.textContent = (dc.binanceAddress || '').trim() || 'Not set by admin yet';
+        if (proofLabelEl) proofLabelEl.textContent = 'Binance Pay Order ID / Sender UID / TxID';
+        if (proofInputEl) proofInputEl.placeholder = 'Enter Binance Pay ID, UID, or TxID';
+        if (proofHintEl) proofHintEl.textContent = 'For Binance transfer/pay, enter your Pay Order ID, sender UID, or transaction ID.';
+      } else {
+        if (addrLabelEl) addrLabelEl.textContent = 'Send Payment To FaucetPay Address / Email:';
+        if (addrEl) addrEl.textContent = (dc.faucetpayAddress || '').trim() || 'Not set by admin yet';
+        if (proofLabelEl) proofLabelEl.textContent = 'FaucetPay Email / Username / Payment ID';
+        if (proofInputEl) proofInputEl.placeholder = 'Enter FaucetPay email, username, or transaction ID';
+        if (proofHintEl) proofHintEl.textContent = 'For FaucetPay, enter the FaucetPay email/username you sent from or your payment ID.';
+      }
     }
 
     function copyDepositAddress() {
@@ -710,6 +722,7 @@
       const data = await res.json();
       if (!res.ok) return showToast(data.error, true);
       e.target.reset();
+      updateDepositMethodUI();
       showToast(data.message);
       loadUserData();
     }
