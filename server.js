@@ -39,7 +39,14 @@ const settingsSchema = new mongoose.Schema({
   signUpBonus: { type: Number, default: 100 },
   dailyBonusPepe: { type: Number, default: 50 },
   ptcAdCreateCost: { type: Number, default: 500 },
+  minTransferPepe: { type: Number, default: 100 },
   couponChannelLink: { type: String, default: '' },
+  depositConfig: {
+    faucetpayAddress: { type: String, default: '' },
+    binanceAddress: { type: String, default: '' },
+    pepeAddress: { type: String, default: '' },
+    pepePerUsd: { type: Number, default: 100000 }
+  },
   faucetpay: {
     enabled: { type: Boolean, default: true },
     apiKey: { type: String, default: '' },
@@ -66,10 +73,14 @@ const settingsSchema = new mongoose.Schema({
 const adSchema = new mongoose.Schema({
   title: { type: String, required: true },
   url: { type: String, required: true },
+  category: { type: String, default: 'PTC' },
   durationSec: { type: Number, default: 15 },
   rewardPepe: { type: Number, default: 100 },
+  viewsTotal: { type: Number, default: 0 },
+  viewsCompleted: { type: Number, default: 0 },
+  totalCost: { type: Number, default: 0 },
   createdBy: { type: String, default: 'admin' },
-  status: { type: String, enum: ['active', 'pending'], default: 'active' }
+  status: { type: String, enum: ['active', 'paused', 'completed', 'pending'], default: 'active' }
 }, { timestamps: true });
 
 const taskSchema = new mongoose.Schema({
@@ -93,7 +104,8 @@ const depositSchema = new mongoose.Schema({
   refId: { type: String, default: '' },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   username: { type: String, required: true },
-  method: { type: String, default: 'FaucetPay / Binance' },
+  method: { type: String, default: 'FaucetPay' },
+  usdAmount: { type: Number, default: 0 },
   txId: { type: String, required: true },
   amount: { type: Number, required: true },
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
@@ -160,15 +172,14 @@ async function getConfig() {
 async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultiplier = 1) {
   const cleanKey = String(apiKey || '').trim();
   if (!cleanKey) {
-    throw new Error('অ্যাডমিন প্যানেল বা Render-এ FaucetPay API Key সেট করা নেই!');
+    throw new Error('FaucetPay API Key is not configured!');
   }
 
-  // যদি কেউ ভুল করে 1000 দিয়ে রাখে, তবে 1 ধরে নেবে যাতে 10 টোকেন = ঠিক 10 PEPE যায়
   const effectiveMult = (!rateMultiplier || Number(rateMultiplier) === 1000) ? 1 : Number(rateMultiplier);
   const satoshiAmount = Math.round(Number(pepeTokens) * effectiveMult * FAUCETPAY_SATOSHI_PER_PEPE);
 
   if (!Number.isFinite(satoshiAmount) || satoshiAmount <= 0) {
-    throw new Error('সঠিক PEPE পরিমাণ দিন!');
+    throw new Error('Please enter a valid PEPE amount!');
   }
 
   const params = new URLSearchParams();
@@ -179,7 +190,7 @@ async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultipl
 
   const fpRes = await axios.post('https://faucetpay.io/api/v1/send', params);
   if (!fpRes.data || fpRes.data.status !== 200) {
-    throw new Error(fpRes.data?.message || 'FaucetPay পেমেন্ট পাঠানো যায়নি');
+    throw new Error(fpRes.data?.message || 'FaucetPay payout failed');
   }
   return fpRes.data;
 }
@@ -188,12 +199,12 @@ async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultipl
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ error: 'লগইন করা প্রয়োজন!' });
+    if (!token) return res.status(401).json({ error: 'Authentication required!' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ error: 'ইউজার পাওয়া যায়নি!' });
+    if (!user) return res.status(401).json({ error: 'User not found!' });
     if (user.status === 'blocked') {
-      return res.status(403).json({ error: 'আপনার একাউন্ট ব্লক করা হয়েছে!' });
+      return res.status(403).json({ error: 'Your account has been blocked!' });
     }
 
     const now = new Date();
@@ -205,7 +216,7 @@ const auth = async (req, res, next) => {
     req.user = user;
     next();
   } catch (e) {
-    res.status(401).json({ error: 'সেশন মেয়াদোত্তীর্ণ, আবার লগইন করুন।' });
+    res.status(401).json({ error: 'Session expired. Please log in again.' });
   }
 };
 
@@ -213,7 +224,7 @@ const auth = async (req, res, next) => {
 function requireAdminPin(req, res, next) {
   const pin = req.headers['x-admin-pin'] || req.body?.adminPin || req.query?.pin;
   if (String(pin || '') !== String(ADMIN_PIN)) {
-    return res.status(401).json({ ok: false, message: 'ভুল অ্যাডমিন PIN' });
+    return res.status(401).json({ ok: false, message: 'Invalid Admin PIN' });
   }
   next();
 }
@@ -323,8 +334,9 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/user', auth, async (req, res) => {
   const u = req.user;
   const cfg = await getConfig();
-  const [ads, tasks, latestCoupon] = await Promise.all([
-    Ad.find({ status: { $ne: 'pending' } }).sort({ createdAt: -1 }),
+  const [ads, myAds, tasks, latestCoupon] = await Promise.all([
+    Ad.find({ status: 'active' }).sort({ createdAt: -1 }),
+    Ad.find({ createdBy: u.username }).sort({ createdAt: -1 }),
     Task.find().sort({ createdAt: -1 }),
     Coupon.findOne({ active: true }).sort({ createdAt: -1 })
   ]);
@@ -347,6 +359,13 @@ app.get('/api/user', auth, async (req, res) => {
     signUpBonus: cfg?.signUpBonus ?? 100,
     dailyBonusPepe: cfg?.dailyBonusPepe ?? 50,
     ptcAdCreateCost: cfg?.ptcAdCreateCost ?? 500,
+    minTransferPepe: cfg?.minTransferPepe ?? 100,
+    depositConfig: cfg?.depositConfig || {
+      faucetpayAddress: '',
+      binanceAddress: '',
+      pepeAddress: '',
+      pepePerUsd: 100000
+    },
     couponChannelLink,
     canClaimDailyBonus,
     nextDailyBonusAt,
@@ -354,6 +373,7 @@ app.get('/api/user', auth, async (req, res) => {
     dailyAdLimit: cfg?.dailyAdLimit ?? 30,
     adReward: cfg?.adReward ?? 100,
     ads,
+    myAds,
     tasks,
     completedTasks: u.completedTasks,
     history: u.history,
@@ -363,6 +383,40 @@ app.get('/api/user', auth, async (req, res) => {
       binance: cfg?.binance
     }
   });
+});
+
+// --- Transfer Main Balance -> Deposit Balance ---
+app.post('/api/transfer-to-deposit', auth, async (req, res) => {
+  try {
+    const cfg = await getConfig();
+    const minTransfer = Math.max(1, Number(cfg?.minTransferPepe ?? 100));
+    const amount = Number(req.body?.amount);
+
+    if (!Number.isFinite(amount) || amount < minTransfer) {
+      return res.status(400).json({ error: `Minimum transfer amount is ${minTransfer} PEPE!` });
+    }
+    if (Number(req.user.balance || 0) < amount) {
+      return res.status(400).json({ error: 'Insufficient main PEPE balance!' });
+    }
+
+    req.user.balance = Number(req.user.balance || 0) - amount;
+    req.user.depositBalance = Number(req.user.depositBalance || 0) + amount;
+    req.user.history.unshift({
+      type: 'Balance Transfer',
+      detail: 'Transferred Main Balance to Deposit Balance',
+      amount: -amount,
+      status: 'Completed'
+    });
+    await req.user.save();
+
+    res.json({
+      message: `Transferred ${amount} PEPE to your Deposit Balance!`,
+      balance: req.user.balance,
+      depositBalance: req.user.depositBalance
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Transfer failed!' });
+  }
 });
 
 app.post('/api/bonus/daily', auth, async (req, res) => {
@@ -442,12 +496,19 @@ app.post('/api/coupons/redeem', auth, async (req, res) => {
 
 app.post('/api/deposit/request', auth, async (req, res) => {
   try {
-    const { method, txId, amount } = req.body;
-    const numAmount = Number(amount);
-    const cleanTx = String(txId || '').trim();
+    const { method, usdAmount, txId, amount } = req.body;
+    const cfg = await getConfig();
+    const pepePerUsd = Math.max(1, Number(cfg?.depositConfig?.pepePerUsd ?? 100000));
+    const parsedUsd = Math.max(0, Number(usdAmount) || 0);
+    let numAmount = Number(amount) || 0;
 
+    if (!numAmount && parsedUsd > 0) {
+      numAmount = Math.round(parsedUsd * pepePerUsd);
+    }
+
+    const cleanTx = String(txId || '').trim();
     if (!cleanTx || !Number.isFinite(numAmount) || numAmount <= 0) {
-      return res.status(400).json({ error: 'Please enter a valid amount and transaction ID!' });
+      return res.status(400).json({ error: 'Please enter a valid amount (USD or PEPE) and transaction ID!' });
     }
 
     const refId = 'dep_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
@@ -455,7 +516,8 @@ app.post('/api/deposit/request', auth, async (req, res) => {
       refId,
       userId: req.user._id,
       username: req.user.username,
-      method: String(method || 'FaucetPay / Binance').trim(),
+      method: String(method || 'FaucetPay').trim(),
+      usdAmount: parsedUsd,
       txId: cleanTx,
       amount: numAmount,
       status: 'pending'
@@ -464,7 +526,7 @@ app.post('/api/deposit/request', auth, async (req, res) => {
     req.user.history.unshift({
       refId,
       type: 'Deposit',
-      detail: `Deposit (${method || 'Wallet'}) - ${cleanTx}`,
+      detail: `Deposit (${method || 'Wallet'}${parsedUsd ? ` • $${parsedUsd}` : ''}) - ${cleanTx}`,
       amount: numAmount,
       status: 'Pending Approval'
     });
@@ -476,11 +538,11 @@ app.post('/api/deposit/request', auth, async (req, res) => {
   }
 });
 
+// --- User PTC Ad Submit (Strictly from depositBalance) ---
 app.post('/api/ads/submit', auth, async (req, res) => {
   try {
-    const { title, url, durationSec, rewardPepe } = req.body;
+    const { title, url, category, durationSec, rewardPepe, viewsTotal } = req.body;
     const cfg = await getConfig();
-    const cost = Number(cfg?.ptcAdCreateCost ?? 500);
 
     const cleanTitle = String(title || '').trim();
     const cleanUrl = String(url || '').trim();
@@ -488,23 +550,22 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       return res.status(400).json({ error: 'Ad title and target URL are required!' });
     }
 
-    const totalAvailable = Number(req.user.depositBalance || 0) + Number(req.user.balance || 0);
-    if (totalAvailable < cost) {
-      return res.status(400).json({ error: `Insufficient funds! Creating a PTC ad costs ${cost} PEPE.` });
+    const reward = Math.max(1, Number(rewardPepe) || Number(cfg?.adReward) || 100);
+    const views = Math.max(1, Number(viewsTotal) || 1);
+    const baseCost = Number(cfg?.ptcAdCreateCost ?? 500);
+    const cost = views > 1 ? reward * views : Math.max(reward * views, baseCost);
+
+    const currentDeposit = Number(req.user.depositBalance || 0);
+    if (currentDeposit < cost) {
+      return res.status(400).json({
+        error: `Insufficient Deposit Balance! Required: ${cost} PEPE, Available Deposit Balance: ${currentDeposit} PEPE.`
+      });
     }
 
-    if (Number(req.user.depositBalance || 0) >= cost) {
-      req.user.depositBalance = Number(req.user.depositBalance || 0) - cost;
-    } else {
-      const fromDeposit = Number(req.user.depositBalance || 0);
-      const fromMain = cost - fromDeposit;
-      req.user.depositBalance = 0;
-      req.user.balance = Math.max(0, Number(req.user.balance || 0) - fromMain);
-    }
-
+    req.user.depositBalance = currentDeposit - cost;
     req.user.history.unshift({
       type: 'PTC Advertising',
-      detail: `Submitted Ad: ${cleanTitle}`,
+      detail: `Campaign: ${cleanTitle} (${views} views)`,
       amount: -cost,
       status: 'Active'
     });
@@ -513,8 +574,12 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     const createdAd = await Ad.create({
       title: cleanTitle,
       url: cleanUrl,
+      category: String(category || 'PTC').trim(),
       durationSec: Math.max(5, Number(durationSec) || 15),
-      rewardPepe: Math.max(1, Number(rewardPepe) || Number(cfg?.adReward) || 100),
+      rewardPepe: reward,
+      viewsTotal: views,
+      viewsCompleted: 0,
+      totalCost: cost,
       createdBy: req.user.username,
       status: 'active'
     });
@@ -527,6 +592,46 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to publish PTC ad!' });
+  }
+});
+
+// --- User Pause / Resume Own Campaign ---
+app.patch('/api/ads/:id/toggle', auth, async (req, res) => {
+  try {
+    const ad = await Ad.findById(req.params.id);
+    if (!ad) return res.status(404).json({ error: 'Campaign not found!' });
+    if (ad.createdBy !== req.user.username) {
+      return res.status(403).json({ error: 'You can only manage your own campaigns!' });
+    }
+    if (ad.status === 'completed') {
+      return res.status(400).json({ error: 'Completed campaigns cannot be resumed!' });
+    }
+
+    ad.status = ad.status === 'active' ? 'paused' : 'active';
+    await ad.save();
+
+    res.json({
+      message: ad.status === 'paused' ? 'Campaign paused.' : 'Campaign resumed.',
+      ad
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update campaign status!' });
+  }
+});
+
+// --- User Delete Own Campaign ---
+app.delete('/api/ads/:id', auth, async (req, res) => {
+  try {
+    const ad = await Ad.findById(req.params.id);
+    if (!ad) return res.status(404).json({ error: 'Campaign not found!' });
+    if (ad.createdBy !== req.user.username) {
+      return res.status(403).json({ error: 'You can only delete your own campaigns!' });
+    }
+
+    await Ad.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Campaign deleted!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete campaign!' });
   }
 });
 
@@ -547,8 +652,16 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     if (adId) {
       const foundAd = await Ad.findById(adId);
       if (foundAd) {
+        if (foundAd.status !== 'active') {
+          return res.status(400).json({ error: 'This ad campaign is currently not active!' });
+        }
         reward = Number(foundAd.rewardPepe) || reward;
         title = foundAd.title;
+        foundAd.viewsCompleted = Number(foundAd.viewsCompleted || 0) + 1;
+        if (Number(foundAd.viewsTotal || 0) > 0 && foundAd.viewsCompleted >= Number(foundAd.viewsTotal)) {
+          foundAd.status = 'completed';
+        }
+        await foundAd.save();
       }
     }
 
@@ -739,6 +852,8 @@ app.put('/api/admin/settings', requireAdminPin, async (req, res) => {
       signUpBonus,
       dailyBonusPepe,
       ptcAdCreateCost,
+      minTransferPepe,
+      depositConfig,
       couponChannelLink
     } = req.body;
 
@@ -747,12 +862,14 @@ app.put('/api/admin/settings', requireAdminPin, async (req, res) => {
     if (binance) updateDoc.binance = binance;
     if (referral) updateDoc.referral = referral;
     if (security) updateDoc.security = security;
+    if (depositConfig) updateDoc.depositConfig = depositConfig;
     if (adReward !== undefined) updateDoc.adReward = Number(adReward);
     if (dailyAdLimit !== undefined) updateDoc.dailyAdLimit = Number(dailyAdLimit);
     if (minWithdraw !== undefined) updateDoc.minWithdraw = Number(minWithdraw);
     if (signUpBonus !== undefined) updateDoc.signUpBonus = Number(signUpBonus);
     if (dailyBonusPepe !== undefined) updateDoc.dailyBonusPepe = Number(dailyBonusPepe);
     if (ptcAdCreateCost !== undefined) updateDoc.ptcAdCreateCost = Number(ptcAdCreateCost);
+    if (minTransferPepe !== undefined) updateDoc.minTransferPepe = Number(minTransferPepe);
     if (couponChannelLink !== undefined) updateDoc.couponChannelLink = String(couponChannelLink || '').trim();
 
     const updated = await Settings.findOneAndUpdate(
@@ -835,12 +952,15 @@ app.patch('/api/admin/deposits/:id/decision', requireAdminPin, async (req, res) 
 
 app.post('/api/admin/ads', requireAdminPin, async (req, res) => {
   try {
-    const { title, url, durationSec, rewardPepe } = req.body;
+    const { title, url, category, durationSec, rewardPepe, viewsTotal } = req.body;
     const ad = await Ad.create({
       title,
       url,
+      category: category || 'PTC',
       durationSec: Number(durationSec) || 15,
-      rewardPepe: Number(rewardPepe) || 100
+      rewardPepe: Number(rewardPepe) || 100,
+      viewsTotal: Number(viewsTotal) || 0,
+      status: 'active'
     });
     res.json({ ok: true, ad });
   } catch (err) {
@@ -889,13 +1009,13 @@ app.post('/api/admin/users', requireAdminPin, async (req, res) => {
     if (cfg?.security?.oneAccountPerDevice && deviceId) {
       const devExists = await User.findOne({ deviceId: String(deviceId).trim() });
       if (devExists) {
-        return res.status(400).json({ ok: false, message: 'এই Device ID দিয়ে ইতিমধ্যে একটি একাউন্ট আছে!' });
+        return res.status(400).json({ ok: false, message: 'An account with this Device ID already exists!' });
       }
     }
     if (cfg?.security?.oneAccountPerIp && ipAddress) {
       const ipExists = await User.findOne({ ipAddress: String(ipAddress).trim() });
       if (ipExists) {
-        return res.status(400).json({ ok: false, message: 'এই IP / Wi-Fi দিয়ে ইতিমধ্যে একটি একাউন্ট আছে!' });
+        return res.status(400).json({ ok: false, message: 'An account with this IP / Wi-Fi already exists!' });
       }
     }
 
@@ -926,7 +1046,7 @@ app.patch('/api/admin/users/:id/balance', requireAdminPin, async (req, res) => {
   try {
     const delta = Number(req.body.delta) || 0;
     const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ ok: false, message: 'ইউজার পাওয়া যায়নি' });
+    if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
 
     user.balance = Math.max(0, Number(user.balance || 0) + delta);
     user.history.unshift({
@@ -1013,10 +1133,10 @@ app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, re
   try {
     const decision = req.body.decision === 'approved' ? 'approved' : 'rejected';
     const withdrawal = await Withdrawal.findById(req.params.id);
-    if (!withdrawal) return res.status(404).json({ ok: false, message: 'রিকোয়েস্ট পাওয়া যায়নি' });
+    if (!withdrawal) return res.status(404).json({ ok: false, message: 'Request not found' });
 
     if (withdrawal.status !== 'pending') {
-      return res.status(400).json({ ok: false, message: 'এই রিকোয়েস্ট ইতিমধ্যে প্রসেস করা হয়েছে' });
+      return res.status(400).json({ ok: false, message: 'This request has already been processed' });
     }
 
     const cfg = await getConfig();
@@ -1031,7 +1151,6 @@ app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, re
     withdrawal.status = decision;
     await withdrawal.save();
 
-    // userId অথবা username দিয়ে ইউজার খুঁজে বের করে তার History আপডেট করা
     let user = null;
     if (withdrawal.userId) {
       user = await User.findById(withdrawal.userId);
@@ -1045,7 +1164,6 @@ app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, re
         user.balance += Number(withdrawal.amount) || 0;
       }
 
-      // প্রথমে refId দিয়ে মিলানো, না পেলে Pending স্ট্যাটাসের ম্যাচিং এন্ট্রি আপডেট করা
       let histItem = withdrawal.refId
         ? user.history.find(h => h.refId === withdrawal.refId)
         : null;
