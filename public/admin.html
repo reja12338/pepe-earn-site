@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -183,9 +183,9 @@
   <div id="gateScreen" class="gate">
     <form id="loginForm" class="gate-box">
       <h2 style="margin:0 0 6px;">Standalone Admin Panel</h2>
-      <p style="margin:0 0 14px; color:var(--muted); font-size:13px;">শুধুমাত্র অ্যাডমিন PIN দিয়ে প্রবেশ করুন।</p>
+      <p style="margin:0 0 14px; color:var(--muted); font-size:13px;">Enter Admin PIN to access the control panel.</p>
       <label for="pinInput">Admin PIN</label>
-      <input id="pinInput" type="password" placeholder="PIN লিখুন (Default: 2026)" required />
+      <input id="pinInput" type="password" placeholder="Enter PIN (Default: 2026)" required />
       <div class="row">
         <button type="submit" class="btn btn-primary" style="width:100%;">Unlock Admin Panel</button>
       </div>
@@ -225,6 +225,8 @@
         <button type="button" class="tab-btn active" data-tab="payouts">FaucetPay & Binance</button>
         <button type="button" class="tab-btn" data-tab="ads">PTC Ads (Unlimited)</button>
         <button type="button" class="tab-btn" data-tab="tasks">Social Tasks (Unlimited)</button>
+        <button type="button" class="tab-btn" data-tab="bonuses">Bonuses & Coupons</button>
+        <button type="button" class="tab-btn" data-tab="deposits">Deposits</button>
         <button type="button" class="tab-btn" data-tab="users">Users</button>
         <button type="button" class="tab-btn" data-tab="security">Referral & Security</button>
       </nav>
@@ -256,15 +258,15 @@
             </select>
             <label for="bnMinWithdraw">Minimum Withdraw (PEPE)</label>
             <input id="bnMinWithdraw" type="number" min="1" value="500" />
-            <label for="bnInputMode">ইউজার কী দেবে? (Input Requirement)</label>
+            <label for="bnInputMode">Input Requirement</label>
             <select id="bnInputMode">
-              <option value="uid">শুধু Binance UID / Pay ID</option>
-              <option value="address_network">শুধু PEPE Address + Network</option>
-              <option value="both">উভয়টি (UID / Address + Network)</option>
+              <option value="uid">Binance UID / Pay ID Only</option>
+              <option value="address_network">PEPE Address + Network Only</option>
+              <option value="both">Both (UID / Address + Network)</option>
             </select>
-            <label for="bnFieldLabel">ইনপুট লেবেল</label>
+            <label for="bnFieldLabel">Input Field Label</label>
             <input id="bnFieldLabel" type="text" value="Binance UID / Pay ID" />
-            <label for="bnFieldPlaceholder">ইনপুট প্লেসহোল্ডার</label>
+            <label for="bnFieldPlaceholder">Input Field Placeholder</label>
             <input id="bnFieldPlaceholder" type="text" value="Enter your Binance UID or Pay ID" />
           </div>
         </div>
@@ -310,14 +312,18 @@
 
       <!-- TAB 2: PTC ADS -->
       <section id="tab-ads" class="panel hidden">
-        <h3 style="margin-top:0;">24h Daily Ad Limit Control</h3>
+        <h3 style="margin-top:0;">24h Daily Ad Limit & PTC Advertising Cost</h3>
         <div class="grid-2">
           <div>
-            <label for="dailyAdLimitInput">২৪ ঘণ্টায় ইউজার সর্বোচ্চ কয়টি এড দেখতে পারবে? (যেমন: 30, 50, 100)</label>
+            <label for="dailyAdLimitInput">Daily Ad Limit (24 Hours)</label>
             <input id="dailyAdLimitInput" type="number" min="1" value="30" />
           </div>
-          <div style="display:flex; align-items:flex-end;">
-            <button id="saveAdLimitBtn" type="button" class="btn btn-info" style="width:100%;">Save 24h Ad Limit</button>
+          <div>
+            <label for="ptcAdCreateCostInput">User PTC Ad Creation Cost (PEPE)</label>
+            <input id="ptcAdCreateCostInput" type="number" min="0" value="500" />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <button id="saveAdLimitBtn" type="button" class="btn btn-info">Save Ad Limit & Cost</button>
           </div>
         </div>
 
@@ -380,7 +386,61 @@
         <div id="tasksList"></div>
       </section>
 
-      <!-- TAB 4: USERS -->
+      <!-- TAB 4: BONUSES & COUPONS -->
+      <section id="tab-bonuses" class="panel hidden">
+        <h3 style="margin-top:0;">Sign Up Bonus & Daily Bonus Settings</h3>
+        <div class="grid-2">
+          <div>
+            <label for="signUpBonusInput">Sign Up Bonus (PEPE)</label>
+            <input id="signUpBonusInput" type="number" min="0" value="100" />
+          </div>
+          <div>
+            <label for="dailyBonusPepeInput">Daily Bonus (PEPE / 24h)</label>
+            <input id="dailyBonusPepeInput" type="number" min="0" value="50" />
+          </div>
+          <div>
+            <label for="defaultCouponChannelInput">Default Telegram Channel Link</label>
+            <input id="defaultCouponChannelInput" type="url" placeholder="https://t.me/yourchannel" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="saveBonusSettingsBtn" type="button" class="btn btn-primary">Save Bonus Settings</button>
+        </div>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:22px 0;" />
+
+        <h3 style="margin-top:0;">Create Coupon Code</h3>
+        <form id="couponForm" class="grid-2">
+          <div>
+            <label for="couponCode">Coupon Code</label>
+            <input id="couponCode" type="text" placeholder="PEPE2026" required />
+          </div>
+          <div>
+            <label for="couponReward">Reward (PEPE)</label>
+            <input id="couponReward" type="number" min="1" value="100" required />
+          </div>
+          <div>
+            <label for="couponMaxUses">Max Uses</label>
+            <input id="couponMaxUses" type="number" min="1" value="100" required />
+          </div>
+          <div>
+            <label for="couponChannelLink">Telegram Channel Link</label>
+            <input id="couponChannelLink" type="url" placeholder="https://t.me/yourchannel" />
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-info">Create Coupon</button>
+          </div>
+        </form>
+        <div id="couponsList"></div>
+      </section>
+
+      <!-- TAB 5: DEPOSITS -->
+      <section id="tab-deposits" class="panel hidden">
+        <h3 style="margin-top:0;">User Deposit Requests</h3>
+        <div id="depositsList"></div>
+      </section>
+
+      <!-- TAB 6: USERS -->
       <section id="tab-users" class="panel hidden">
         <h3 style="margin-top:0;">Add User</h3>
         <form id="userForm" class="grid-2">
@@ -407,7 +467,7 @@
         <div id="usersList"></div>
       </section>
 
-      <!-- TAB 5: REFERRAL & SECURITY -->
+      <!-- TAB 7: REFERRAL & SECURITY -->
       <section id="tab-security" class="panel hidden">
         <h3 style="margin-top:0;">Referral & Anti-Multi-Account Security</h3>
         <div class="grid-2">
@@ -454,6 +514,10 @@
       return {
         settings: {
           dailyAdLimit: 30,
+          signUpBonus: 100,
+          dailyBonusPepe: 50,
+          ptcAdCreateCost: 500,
+          couponChannelLink: '',
           faucetpay: { enabled: true, apiKey: '', minWithdraw: 10, rateMultiplier: 1 },
           binance: {
             enabled: true,
@@ -467,6 +531,8 @@
         },
         ads: [],
         tasks: [],
+        coupons: [],
+        deposits: [],
         users: [],
         withdrawals: []
       };
@@ -521,6 +587,8 @@
       const withdrawals = data.withdrawals || [];
       const ads = data.ads || [];
       const tasks = data.tasks || [];
+      const coupons = data.coupons || [];
+      const deposits = data.deposits || [];
       const s = data.settings || defaultLocalState().settings;
 
       const activeUsers = users.filter(u => u.status !== 'blocked').length;
@@ -534,6 +602,10 @@
       document.getElementById('statTasks').textContent = tasks.length;
 
       document.getElementById('dailyAdLimitInput').value = s.dailyAdLimit ?? 30;
+      document.getElementById('ptcAdCreateCostInput').value = s.ptcAdCreateCost ?? 500;
+      document.getElementById('signUpBonusInput').value = s.signUpBonus ?? 100;
+      document.getElementById('dailyBonusPepeInput').value = s.dailyBonusPepe ?? 50;
+      document.getElementById('defaultCouponChannelInput').value = s.couponChannelLink || '';
 
       document.getElementById('fpEnabled').value = String(Boolean(s.faucetpay?.enabled));
       document.getElementById('fpApiKey').value = s.faucetpay?.apiKey || '';
@@ -557,6 +629,8 @@
       renderWithdrawals(withdrawals);
       renderAds(ads);
       renderTasks(tasks);
+      renderCoupons(coupons);
+      renderDeposits(deposits);
       renderUsers(users);
     }
 
@@ -584,16 +658,16 @@
         if (ct.includes('application/json')) {
           const data = await res.json();
           if (!res.ok || !data.ok) {
-            showToast(data.message || 'ভুল PIN');
+            showToast(data.message || 'Invalid PIN');
             return;
           }
         } else if (pin !== '2026') {
-          showToast('ভুল PIN (Default: 2026)');
+          showToast('Invalid PIN (Default: 2026)');
           return;
         }
       } catch {
         if (pin !== '2026') {
-          showToast('ভুল PIN (Default: 2026)');
+          showToast('Invalid PIN (Default: 2026)');
           return;
         }
       }
@@ -602,7 +676,7 @@
       document.getElementById('gateScreen').classList.add('hidden');
       document.getElementById('appShell').classList.remove('hidden');
       await loadAll();
-      showToast('অ্যাডমিন প্যানেল আনলক হয়েছে');
+      showToast('Admin panel unlocked');
     });
 
     document.getElementById('lockBtn').addEventListener('click', () => {
@@ -626,25 +700,140 @@
 
     document.getElementById('refreshBtn').addEventListener('click', async () => {
       await loadAll();
-      showToast('ডাটা রিফ্রেশ হয়েছে');
+      showToast('Data refreshed');
     });
 
     document.getElementById('saveAdLimitBtn').addEventListener('click', async () => {
       const nextLimit = Math.max(1, Number(document.getElementById('dailyAdLimitInput').value) || 30);
+      const nextCost = Math.max(0, Number(document.getElementById('ptcAdCreateCostInput').value) || 0);
       const local = readLocal();
       local.settings.dailyAdLimit = nextLimit;
+      local.settings.ptcAdCreateCost = nextCost;
       writeLocal(local);
 
       try {
         await tryApi('/api/admin/settings', {
           method: 'PUT',
-          body: JSON.stringify({ dailyAdLimit: nextLimit })
+          body: JSON.stringify({ dailyAdLimit: nextLimit, ptcAdCreateCost: nextCost })
         });
       } catch {}
 
       await loadAll();
-      showToast(`২৪ ঘণ্টার এড লিমিট ${nextLimit} সেভ হয়েছে`);
+      showToast('Ad limit and PTC cost saved');
     });
+
+    document.getElementById('saveBonusSettingsBtn').addEventListener('click', async () => {
+      const payload = {
+        signUpBonus: Math.max(0, Number(document.getElementById('signUpBonusInput').value) || 0),
+        dailyBonusPepe: Math.max(0, Number(document.getElementById('dailyBonusPepeInput').value) || 0),
+        couponChannelLink: document.getElementById('defaultCouponChannelInput').value.trim()
+      };
+
+      const local = readLocal();
+      local.settings = { ...local.settings, ...payload };
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) });
+      } catch {}
+
+      await loadAll();
+      showToast('Bonus & coupon settings saved');
+    });
+
+    document.getElementById('couponForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const coupon = {
+        _id: 'cpn_' + Date.now(),
+        code: document.getElementById('couponCode').value.trim().toUpperCase(),
+        rewardPepe: Number(document.getElementById('couponReward').value) || 100,
+        maxUses: Number(document.getElementById('couponMaxUses').value) || 100,
+        channelLink: document.getElementById('couponChannelLink').value.trim(),
+        usedCount: 0
+      };
+
+      const local = readLocal();
+      local.coupons = [coupon, ...(local.coupons || [])];
+      if (coupon.channelLink) {
+        local.settings.couponChannelLink = coupon.channelLink;
+      }
+      writeLocal(local);
+
+      try {
+        await tryApi('/api/admin/coupons', { method: 'POST', body: JSON.stringify(coupon) });
+      } catch {}
+
+      e.target.reset();
+      await loadAll();
+      showToast('Coupon created');
+    });
+
+    function renderCoupons(items) {
+      const box = document.getElementById('couponsList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">No coupons created yet.</p>';
+        return;
+      }
+      box.innerHTML = items.map(c => `
+        <div class="list-item">
+          <div>
+            <strong>${c.code}</strong> (+${c.rewardPepe} PEPE • Used: ${c.usedCount || 0}/${c.maxUses})<br/>
+            <span style="font-size:12px; color:var(--muted);">${c.channelLink || 'No Telegram channel link'}</span>
+          </div>
+          <button type="button" class="btn btn-danger" onclick="deleteCoupon('${c._id}')">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    window.deleteCoupon = async (id) => {
+      const local = readLocal();
+      local.coupons = (local.coupons || []).filter(c => c._id !== id);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/coupons/${id}`, { method: 'DELETE' });
+      } catch {}
+
+      await loadAll();
+      showToast('Coupon deleted');
+    };
+
+    function renderDeposits(items) {
+      const box = document.getElementById('depositsList');
+      if (!items.length) {
+        box.innerHTML = '<p style="color:var(--muted);">No deposit requests yet.</p>';
+        return;
+      }
+      box.innerHTML = items.map(d => `
+        <div class="list-item">
+          <div>
+            <strong>${d.username}</strong> • <span style="color:var(--muted);">${d.method || 'Wallet'}</span><br/>
+            <span style="font-size:13px;">TxID: ${d.txId}</span><br/>
+            <strong>Amount: ${d.amount} PEPE</strong>
+          </div>
+          <div class="row" style="margin:0;">
+            <span class="badge b-${d.status}">${String(d.status).toUpperCase()}</span>
+            ${d.status === 'pending' ? `
+              <button type="button" class="btn btn-primary" onclick="decideDeposit('${d._id}', 'approved')">Approve</button>
+              <button type="button" class="btn btn-danger" onclick="decideDeposit('${d._id}', 'rejected')">Reject</button>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.decideDeposit = async (id, decision) => {
+      const local = readLocal();
+      local.deposits = (local.deposits || []).map(d => d._id === id ? { ...d, status: decision } : d);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/deposits/${id}/decision`, { method: 'PATCH', body: JSON.stringify({ decision }) });
+      } catch {}
+
+      await loadAll();
+      showToast(`Deposit ${decision}`);
+    };
 
     document.getElementById('savePayoutSettingsBtn').addEventListener('click', async () => {
       const payload = {
@@ -672,7 +861,7 @@
       } catch {}
 
       await loadAll();
-      showToast('FaucetPay ও Binance সেটিংস সেভ হয়েছে');
+      showToast('FaucetPay & Binance settings saved');
     });
 
     document.getElementById('saveSecurityBtn').addEventListener('click', async () => {
@@ -696,7 +885,7 @@
       } catch {}
 
       await loadAll();
-      showToast('Referral ও Security সেটিংস সেভ হয়েছে');
+      showToast('Referral & Security settings saved');
     });
 
     document.getElementById('createWithdrawForm').addEventListener('submit', async (e) => {
@@ -724,13 +913,13 @@
 
       e.target.reset();
       await loadAll();
-      showToast('উইথড্র এন্ট্রি যুক্ত হয়েছে');
+      showToast('Withdrawal entry added');
     });
 
     function renderWithdrawals(items) {
       const box = document.getElementById('withdrawalsList');
       if (!items.length) {
-        box.innerHTML = '<p style="color:var(--muted);">কোনো উইথড্র রিকোয়েস্ট নেই।</p>';
+        box.innerHTML = '<p style="color:var(--muted);">No withdrawal requests found.</p>';
         return;
       }
       box.innerHTML = items.map(w => `
@@ -784,13 +973,13 @@
 
       e.target.reset();
       await loadAll();
-      showToast('নতুন PTC এড যুক্ত হয়েছে');
+      showToast('New PTC ad added');
     });
 
     function renderAds(items) {
       const box = document.getElementById('adsList');
       if (!items.length) {
-        box.innerHTML = '<p style="color:var(--muted);">কোনো PTC এড নেই।</p>';
+        box.innerHTML = '<p style="color:var(--muted);">No PTC ads found.</p>';
         return;
       }
       box.innerHTML = items.map(a => `
@@ -814,7 +1003,7 @@
       } catch {}
 
       await loadAll();
-      showToast('PTC এড ডিলিট হয়েছে');
+      showToast('PTC ad deleted');
     };
 
     document.getElementById('taskForm').addEventListener('submit', async (e) => {
@@ -837,13 +1026,13 @@
 
       e.target.reset();
       await loadAll();
-      showToast('নতুন Social Task যুক্ত হয়েছে');
+      showToast('New social task added');
     });
 
     function renderTasks(items) {
       const box = document.getElementById('tasksList');
       if (!items.length) {
-        box.innerHTML = '<p style="color:var(--muted);">কোনো Social Task নেই।</p>';
+        box.innerHTML = '<p style="color:var(--muted);">No social tasks found.</p>';
         return;
       }
       box.innerHTML = items.map(t => `
@@ -867,7 +1056,7 @@
       } catch {}
 
       await loadAll();
-      showToast('Social Task ডিলিট হয়েছে');
+      showToast('Social task deleted');
     };
 
     document.getElementById('userForm').addEventListener('submit', async (e) => {
@@ -878,11 +1067,11 @@
       const local = readLocal();
 
       if (local.settings.security.oneAccountPerDevice && deviceId && local.users.some(u => u.deviceId === deviceId)) {
-        showToast('এই Device ID দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট আছে!');
+        showToast('An account with this Device ID already exists!');
         return;
       }
       if (local.settings.security.oneAccountPerIp && ipAddress && local.users.some(u => u.ipAddress === ipAddress)) {
-        showToast('এই IP / Wi-Fi দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট আছে!');
+        showToast('An account with this IP / Wi-Fi already exists!');
         return;
       }
 
@@ -904,13 +1093,13 @@
 
       e.target.reset();
       await loadAll();
-      showToast('নতুন ইউজার যুক্ত হয়েছে');
+      showToast('New user added');
     });
 
     function renderUsers(items) {
       const box = document.getElementById('usersList');
       if (!items.length) {
-        box.innerHTML = '<p style="color:var(--muted);">কোনো ইউজার নেই।</p>';
+        box.innerHTML = '<p style="color:var(--muted);">No users found.</p>';
         return;
       }
       box.innerHTML = items.map(u => `
@@ -941,7 +1130,7 @@
       } catch {}
 
       await loadAll();
-      showToast('ব্যালেন্স আপডেট হয়েছে');
+      showToast('Balance updated');
     };
 
     window.toggleUserStatus = async (id, status) => {
@@ -967,7 +1156,7 @@
       } catch {}
 
       await loadAll();
-      showToast('ইউজার রিমুভ হয়েছে');
+      showToast('User removed');
     };
 
     if (adminPin) {
