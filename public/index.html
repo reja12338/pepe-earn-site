@@ -189,7 +189,7 @@
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 class="font-bold text-lg text-white">PTC Ads (User Promoted Links)</h3>
-          <p class="text-xs text-slate-400">Promoted links created by users • No 24h daily limit • Reward: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
+          <p class="text-xs text-slate-400">Promoted links created by users • No 24h daily limit • Complete the timer to claim</p>
         </div>
         <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-green-400">
           Unlimited Daily Views
@@ -231,7 +231,7 @@
       <div class="pepe-card p-6 rounded-2xl max-w-2xl mx-auto space-y-4">
         <h3 class="font-bold text-lg text-white">PTC Advertising — Create Ad</h3>
         <p class="text-xs text-slate-400">
-          Promote Telegram, YouTube, Facebook, Instagram, or any Ad Network link • Paid strictly from Deposit Balance: <span id="advDepositBalance" class="text-blue-400 font-bold">0</span> PEPE
+          Fixed reward per view by timer (cannot be edited) • Paid strictly from Deposit Balance: <span id="advDepositBalance" class="text-blue-400 font-bold">0</span> PEPE
         </p>
 
         <form onsubmit="handleCreateUserAd(event)" class="space-y-4">
@@ -258,12 +258,17 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Timer (Seconds)</label>
-              <input type="number" id="userAdDuration" min="5" value="15" oninput="updateAdCostCalc()" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+              <label class="block text-xs text-slate-400 mb-1">Time (Seconds)</label>
+              <select id="userAdDuration" onchange="syncFixedRewardFromTime()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none">
+                <option value="10">10 second</option>
+                <option value="15">15 second</option>
+                <option value="30">30 second</option>
+                <option value="60">60 second</option>
+              </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Viewer Reward (PEPE)</label>
-              <input type="number" id="userAdReward" min="1" value="100" oninput="updateAdCostCalc()" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white outline-none" />
+              <label class="block text-xs text-slate-400 mb-1">Viewer Rewards (Fixed PEPE)</label>
+              <input type="number" id="userAdReward" value="50" readonly class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-green-400 font-bold outline-none cursor-not-allowed" />
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1">Number of Views</label>
@@ -273,7 +278,7 @@
 
           <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex justify-between items-center text-xs sm:text-sm">
             <span class="text-slate-400">Calculated Total Cost (Deposit Balance):</span>
-            <span id="calcAdCost" class="text-green-400 font-bold">500 PEPE</span>
+            <span id="calcAdCost" class="text-green-400 font-bold">250 PEPE</span>
           </div>
 
           <button type="submit" class="w-full pepe-btn py-3 rounded-xl font-bold text-white">Create & Publish Campaign</button>
@@ -295,7 +300,7 @@
       <div class="pepe-card p-6 rounded-2xl max-w-lg mx-auto space-y-4">
         <h3 class="font-bold text-lg text-white">Deposit Funds</h3>
         <p class="text-xs text-slate-400">
-          Deposit via FaucetPay, Binance, or PEPE Coin • Current Deposit Balance: <span id="depTabBalance" class="text-blue-400 font-bold">0</span> PEPE
+          Minimum Deposit: <span id="minDepositUsdLabel" class="text-yellow-400 font-bold">$1</span> USD • Current Deposit Balance: <span id="depTabBalance" class="text-blue-400 font-bold">0</span> PEPE
         </p>
 
         <form onsubmit="handleDepositRequest(event)" class="space-y-4">
@@ -366,6 +371,13 @@
   </main>
 
   <script>
+    const FIXED_TIME_REWARDS = {
+      10: 50,
+      15: 80,
+      30: 100,
+      60: 120
+    };
+
     let userData = null;
     let activeAd = null;
     let visitedTasks = {};
@@ -461,11 +473,11 @@
       document.getElementById('dashRefCount').textContent = userData.referralCount;
       document.getElementById('dashRefReward').textContent = userData.referralReward;
       document.getElementById('refBadgeReward').textContent = userData.referralReward;
-      document.getElementById('adRewardLabel').textContent = userData.adReward;
       document.getElementById('dashSignUpBonus').textContent = userData.signUpBonus ?? 100;
       document.getElementById('authSignUpBonus').textContent = userData.signUpBonus ?? 100;
       document.getElementById('dailyBonusAmount').textContent = userData.dailyBonusPepe ?? 50;
       document.getElementById('minTransferLabel').textContent = userData.minTransferPepe ?? 100;
+      document.getElementById('minDepositUsdLabel').textContent = `$${userData.depositConfig?.minDepositUsd ?? 1}`;
 
       const channelLink = String(userData.couponChannelLink || '').trim();
       const channelBtn = document.getElementById('couponChannelBtn');
@@ -489,7 +501,7 @@
       const refUrl = `${window.location.origin}/?ref=${userData.referralCode}`;
       document.getElementById('refLinkInput').value = refUrl;
 
-      updateAdCostCalc();
+      syncFixedRewardFromTime();
       updateDepositAddressBox();
       updateWithdrawPlaceholder();
       renderHistory();
@@ -497,6 +509,14 @@
       renderViewAds();
       renderMyCampaigns();
       renderTasks();
+    }
+
+    function syncFixedRewardFromTime() {
+      const sec = Number(document.getElementById('userAdDuration')?.value) || 10;
+      const fixedReward = FIXED_TIME_REWARDS[sec] ?? 50;
+      const rewardInput = document.getElementById('userAdReward');
+      if (rewardInput) rewardInput.value = fixedReward;
+      updateAdCostCalc();
     }
 
     async function handleTransferBalance(e) {
@@ -516,10 +536,10 @@
     }
 
     function updateAdCostCalc() {
-      const reward = Math.max(1, Number(document.getElementById('userAdReward')?.value) || 100);
+      const sec = Number(document.getElementById('userAdDuration')?.value) || 10;
+      const reward = FIXED_TIME_REWARDS[sec] ?? 50;
       const views = Math.max(1, Number(document.getElementById('userAdViews')?.value) || 1);
-      const baseCost = Number(userData?.ptcAdCreateCost ?? 500);
-      const total = views > 1 ? reward * views : Math.max(reward * views, baseCost);
+      const total = reward * views;
       const el = document.getElementById('calcAdCost');
       if (el) el.textContent = `${total} PEPE`;
     }
@@ -581,6 +601,8 @@
 
     async function handleCreateUserAd(e) {
       e.preventDefault();
+      const durationSec = Number(document.getElementById('userAdDuration').value) || 10;
+      const rewardPepe = FIXED_TIME_REWARDS[durationSec] ?? 50;
       const token = localStorage.getItem('pepe_token');
       const res = await fetch('/api/ads/submit', {
         method: 'POST',
@@ -589,14 +611,15 @@
           title: document.getElementById('userAdTitle').value,
           category: document.getElementById('userAdCategory').value,
           url: document.getElementById('userAdUrl').value,
-          durationSec: document.getElementById('userAdDuration').value,
-          rewardPepe: document.getElementById('userAdReward').value,
+          durationSec,
+          rewardPepe,
           viewsTotal: document.getElementById('userAdViews').value
         })
       });
       const data = await res.json();
       if (!res.ok) return showToast(data.error, true);
       e.target.reset();
+      syncFixedRewardFromTime();
       showToast(data.message);
       loadUserData();
     }
@@ -663,6 +686,16 @@
 
     async function handleDepositRequest(e) {
       e.preventDefault();
+      const minUsd = Number(userData?.depositConfig?.minDepositUsd ?? 1);
+      const pepePerUsd = Math.max(1, Number(userData?.depositConfig?.pepePerUsd ?? 100000));
+      const usdVal = Number(document.getElementById('depositUsdAmount').value) || 0;
+      const pepeVal = Number(document.getElementById('depositAmount').value) || 0;
+      const effectiveUsd = usdVal > 0 ? usdVal : (pepeVal / pepePerUsd);
+
+      if (minUsd > 0 && effectiveUsd < minUsd) {
+        return showToast(`Minimum deposit is $${minUsd} USD!`, true);
+      }
+
       const token = localStorage.getItem('pepe_token');
       const res = await fetch('/api/deposit/request', {
         method: 'POST',
@@ -711,8 +744,8 @@
       }
 
       container.innerHTML = ads.map(ad => {
-        const duration = Number(ad.durationSec) || 15;
-        const reward = Number(ad.rewardPepe) || Number(userData.adReward) || 100;
+        const duration = Number(ad.durationSec) || 10;
+        const reward = FIXED_TIME_REWARDS[duration] ?? Number(ad.rewardPepe) ?? 50;
         const safeTitle = encodeURIComponent(ad.title || 'Sponsored Ad');
         const safeUrl = encodeURIComponent(ad.url || '#');
 
@@ -721,7 +754,7 @@
             <div>
               <span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold">${ad.category || 'PTC'}</span>
               <h4 class="font-bold text-white mt-1">${ad.title}</h4>
-              <p class="text-xs text-slate-400 mt-1">Duration: ${duration} seconds • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
+              <p class="text-xs text-slate-400 mt-1">Time: ${duration} second • Viewer Rewards: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
             </div>
             <div class="flex gap-2">
               <button onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
