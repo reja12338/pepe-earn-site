@@ -87,9 +87,10 @@
   <main id="appSection" class="hidden flex-1 max-w-5xl w-full mx-auto p-4 space-y-6">
 
     <!-- Tab Menu -->
-    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-[#131b2e] p-1.5 rounded-2xl border border-slate-800">
+    <div class="grid grid-cols-3 sm:grid-cols-7 gap-2 bg-[#131b2e] p-1.5 rounded-2xl border border-slate-800">
       <button onclick="showTab('dashboard')" id="btn-dashboard" class="tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold">Dashboard</button>
       <button onclick="showTab('ads')" id="btn-ads" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">PTC Ads</button>
+      <button onclick="showTab('viewad')" id="btn-viewad" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">View Ad</button>
       <button onclick="showTab('tasks')" id="btn-tasks" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">Tasks</button>
       <button onclick="showTab('advertise')" id="btn-advertise" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">Advertise</button>
       <button onclick="showTab('deposit')" id="btn-deposit" class="tab-btn text-slate-400 py-2.5 rounded-xl text-xs sm:text-sm font-bold">Deposit</button>
@@ -183,20 +184,36 @@
       </div>
     </section>
 
-    <!-- 2. PTC Ads Option -->
+    <!-- 2. PTC Ads Option (User Promoted Links - No 24h Limit) -->
     <section id="tab-ads" class="hidden space-y-4">
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h3 class="font-bold text-lg text-white">PTC Ads</h3>
-          <p class="text-xs text-slate-400">Click an ad, wait on the ad site, then return and claim • Default Reward: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
+          <h3 class="font-bold text-lg text-white">PTC Ads (User Promoted Links)</h3>
+          <p class="text-xs text-slate-400">Promoted links created by users • No 24h daily limit • Reward: <span id="adRewardLabel" class="text-green-400 font-bold">100</span> PEPE</p>
         </div>
-        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
-          Watched today: <span id="adTabCount" class="text-green-400 font-bold">0</span> / <span id="adTabLimit">30</span>
+        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-green-400">
+          Unlimited Daily Views
         </div>
       </div>
 
-      <!-- Live Ads List -->
+      <!-- Live User Promoted Ads List -->
       <div id="adsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- 2B. View Ad Option (Admin Links Only - 24h Daily Limit) -->
+    <section id="tab-viewad" class="hidden space-y-4">
+      <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h3 class="font-bold text-lg text-white">View Ad</h3>
+          <p class="text-xs text-slate-400">Admin featured ads • Click an ad, wait on the ad site, then return and claim</p>
+        </div>
+        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
+          24h Limit: <span id="viewAdTabCount" class="text-green-400 font-bold">0</span> / <span id="viewAdTabLimit">30</span>
+        </div>
+      </div>
+
+      <!-- Live Admin Ads List -->
+      <div id="viewAdContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
     </section>
 
     <!-- 3. Tasks Option -->
@@ -439,8 +456,8 @@
       document.getElementById('depTabBalance').textContent = depBal;
       document.getElementById('dashAdsCount').textContent = userData.adsWatchedToday;
       document.getElementById('dashAdsLimit').textContent = userData.dailyAdLimit;
-      document.getElementById('adTabCount').textContent = userData.adsWatchedToday;
-      document.getElementById('adTabLimit').textContent = userData.dailyAdLimit;
+      document.getElementById('viewAdTabCount').textContent = userData.adsWatchedToday;
+      document.getElementById('viewAdTabLimit').textContent = userData.dailyAdLimit;
       document.getElementById('dashRefCount').textContent = userData.referralCount;
       document.getElementById('dashRefReward').textContent = userData.referralReward;
       document.getElementById('refBadgeReward').textContent = userData.referralReward;
@@ -477,6 +494,7 @@
       updateWithdrawPlaceholder();
       renderHistory();
       renderAds();
+      renderViewAds();
       renderMyCampaigns();
       renderTasks();
     }
@@ -682,13 +700,13 @@
       `).join('');
     }
 
+    // PTC Ads -> User Promoted Links (No 24h Daily Limit)
     function renderAds() {
       const container = document.getElementById('adsContainer');
-      const ads = Array.isArray(userData.ads) ? userData.ads : [];
-      const limitReached = userData.adsWatchedToday >= userData.dailyAdLimit;
+      const ads = Array.isArray(userData.ptcAds) ? userData.ptcAds : [];
 
       if (ads.length === 0) {
-        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">No PTC ads available right now.</div>`;
+        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">No user-promoted PTC ads available right now.</div>`;
         return;
       }
 
@@ -706,10 +724,47 @@
               <p class="text-xs text-slate-400 mt-1">Duration: ${duration} seconds • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
             </div>
             <div class="flex gap-2">
+              <button onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+                View Ad
+              </button>
+              <button onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+                Claim
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // View Ad -> Admin Ads Only (With 24h Daily Limit)
+    function renderViewAds() {
+      const container = document.getElementById('viewAdContainer');
+      const ads = Array.isArray(userData.adminAds) ? userData.adminAds : [];
+      const limitReached = userData.adsWatchedToday >= userData.dailyAdLimit;
+
+      if (ads.length === 0) {
+        container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">No admin ads have been added yet.</div>`;
+        return;
+      }
+
+      container.innerHTML = ads.map(ad => {
+        const duration = Number(ad.durationSec) || 15;
+        const reward = Number(ad.rewardPepe) || Number(userData.adReward) || 100;
+        const safeTitle = encodeURIComponent(ad.title || 'Sponsored Ad');
+        const safeUrl = encodeURIComponent(ad.url || '#');
+
+        return `
+          <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <div>
+              <span class="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full font-bold">ADMIN AD</span>
+              <h4 class="font-bold text-white mt-1">${ad.title}</h4>
+              <p class="text-xs text-slate-400 mt-1">Duration: ${duration} seconds • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
+            </div>
+            <div class="flex gap-2">
               <button ${limitReached ? 'disabled' : ''} onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 ${limitReached ? 'Limit Reached' : 'View Ad'}
               </button>
-              <button onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+              <button ${limitReached ? 'disabled' : ''} onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 Claim
               </button>
             </div>
@@ -863,7 +918,7 @@
     }
 
     function showTab(tabName) {
-      ['dashboard', 'ads', 'tasks', 'advertise', 'deposit', 'withdraw'].forEach(t => {
+      ['dashboard', 'ads', 'viewad', 'tasks', 'advertise', 'deposit', 'withdraw'].forEach(t => {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tabName);
         document.getElementById(`btn-${t}`).className = t === tabName
           ? 'tab-btn bg-green-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold'
