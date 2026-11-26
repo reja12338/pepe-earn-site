@@ -12,17 +12,14 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// কনফিগারেশন (Render Environment Variables থেকে নেবে)
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET || 'pepe_super_secret_key_2026';
 const ADMIN_PIN = process.env.ADMIN_PIN || '2026';
 const ENV_FAUCETPAY_API_KEY = process.env.FAUCETPAY_API_KEY || '';
 const PORT = process.env.PORT || 3000;
 
-// ১ ফুল PEPE টোকেন = 100,000,000 FaucetPay সাতোশি ইউনিট
 const FAUCETPAY_SATOSHI_PER_PEPE = 100000000;
 
-// নির্ধারিত PTC টাইম ও রিওয়ার্ড টেবিল
 const PTC_TIER_REWARDS = {
   10: 50,
   15: 80,
@@ -30,7 +27,6 @@ const PTC_TIER_REWARDS = {
   60: 120
 };
 
-// MongoDB কানেকশন
 mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log('✅ MongoDB Connected Successfully! Data is permanent.');
@@ -38,7 +34,6 @@ mongoose.connect(MONGO_URI)
   })
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// --- Schemas ---
 const settingsSchema = new mongoose.Schema({
   key: { type: String, unique: true, default: 'global_config' },
   adReward: { type: Number, default: 100 },
@@ -140,6 +135,7 @@ const userSchema = new mongoose.Schema({
     adId: { type: String, required: true },
     watchedAt: { type: Date, default: Date.now }
   }],
+  claimedUserAds: [{ type: String }],
   lastDailyBonus: { type: Date, default: null },
   completedTasks: [{ type: String }],
   history: [{
@@ -201,7 +197,6 @@ function pruneExpired24hLogs(user, nowMs = Date.now()) {
   }
 }
 
-// --- FaucetPay Exact Token Payout Helper ---
 async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultiplier = 1) {
   const cleanKey = String(apiKey || '').trim();
   if (!cleanKey) {
@@ -228,7 +223,6 @@ async function sendFaucetPayExactPepe(apiKey, toAddress, pepeTokens, rateMultipl
   return fpRes.data;
 }
 
-// --- User Auth Middleware ---
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -253,7 +247,6 @@ const auth = async (req, res, next) => {
   }
 };
 
-// --- Admin PIN Middleware ---
 function requireAdminPin(req, res, next) {
   const pin = req.headers['x-admin-pin'] || req.body?.adminPin || req.query?.pin;
   if (String(pin || '') !== String(ADMIN_PIN)) {
@@ -262,7 +255,6 @@ function requireAdminPin(req, res, next) {
   next();
 }
 
-// --- User APIs ---
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password, ref, deviceId } = req.body;
@@ -369,6 +361,7 @@ app.get('/api/user', auth, async (req, res) => {
   const cfg = await getConfig();
   const defaultPerAdLimit = Math.max(1, Number(cfg?.dailyAdLimit ?? 30));
   const nowMs = Date.now();
+  const claimedSet = new Set(Array.isArray(u.claimedUserAds) ? u.claimedUserAds.map(String) : []);
 
   const [adminAdsRaw, ptcAdsRaw, myAds, tasks, latestCoupon] = await Promise.all([
     Ad.find({ status: 'active', source: { $ne: 'user' } }).sort({ createdAt: -1 }),
@@ -378,28 +371,29 @@ app.get('/api/user', auth, async (req, res) => {
     Coupon.findOne({ active: true }).sort({ createdAt: -1 })
   ]);
 
-  const mapAdWithPerAdLimit = (adDoc) => {
+  const adminAds = adminAdsRaw.map(adDoc => {
     const adObj = adDoc.toObject();
     const adLimit = Math.max(1, Number(adObj.dailyUserLimit ?? defaultPerAdLimit));
     const activeLogs = getActive24hLogsForAd(u, adObj._id, nowMs);
     const watched24h = activeLogs.length;
-    const remaining24h = Math.max(0, adLimit - watched24h);
-    const oldestLog = activeLogs.length > 0
-      ? activeLogs.reduce((min, item) => new Date(item.watchedAt).getTime() < new Date(min.watchedAt).getTime() ? item : min)
-      : null;
-    const resetAt24h = oldestLog ? new Date(oldestLog.watchedAt).getTime() + (24 * 60 * 60 * 1000) : null;
-
     return {
       ...adObj,
       dailyUserLimit: adLimit,
       watched24h,
-      remaining24h,
-      resetAt24h
+      remaining24h: Math.max(0, adLimit - watched24h)
     };
-  };
+  });
 
-  const adminAds = adminAdsRaw.map(mapAdWithPerAdLimit);
-  const ptcAds = ptcAdsRaw.map(mapAdWithPerAdLimit);
+  // ইউজার-প্রমোট করা অ্যাড: একবার ক্লেইম করলে ওই ইউজারের লিস্ট থেকে সরে যাবে (কোনো 24h লিমিট নেই)
+  const ptcAds = ptcAdsRaw
+    .filter(adDoc => !claimedSet.has(String(adDoc._id)))
+    .map(adDoc => {
+      const adObj = adDoc.toObject();
+      return {
+        ...adObj,
+        oncePerUser: true
+      };
+    });
 
   const lastBonusMs = u.lastDailyBonus ? new Date(u.lastDailyBonus).getTime() : 0;
   const cooldownMs = 24 * 60 * 60 * 1000;
@@ -447,7 +441,6 @@ app.get('/api/user', auth, async (req, res) => {
   });
 });
 
-// --- Transfer Main Balance -> Deposit Balance ---
 app.post('/api/transfer-to-deposit', auth, async (req, res) => {
   try {
     const cfg = await getConfig();
@@ -606,11 +599,9 @@ app.post('/api/deposit/request', auth, async (req, res) => {
   }
 });
 
-// --- User PTC Ad Submit (Fixed Timer -> Fixed Viewer Reward, Strictly from depositBalance) ---
 app.post('/api/ads/submit', auth, async (req, res) => {
   try {
-    const { title, url, category, durationSec, viewsTotal, dailyUserLimit } = req.body;
-    const cfg = await getConfig();
+    const { title, url, category, durationSec, viewsTotal } = req.body;
 
     const cleanTitle = String(title || '').trim();
     const cleanUrl = String(url || '').trim();
@@ -626,7 +617,6 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     const reward = PTC_TIER_REWARDS[duration];
     const views = Math.max(1, Number(viewsTotal) || 1);
     const cost = reward * views;
-    const perAd24hLimit = Math.max(1, Number(dailyUserLimit ?? cfg?.dailyAdLimit ?? 30));
 
     const currentDeposit = Number(req.user.depositBalance || 0);
     if (currentDeposit < cost) {
@@ -638,7 +628,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     req.user.depositBalance = currentDeposit - cost;
     req.user.history.unshift({
       type: 'PTC Advertising',
-      detail: `Campaign: ${cleanTitle} (${duration}s • ${reward} PEPE/view • ${views} views)`,
+      detail: `Campaign: ${cleanTitle} (${duration}s • ${reward} PEPE/view • ${views} views • 1/user)`,
       amount: -cost,
       status: 'Active'
     });
@@ -651,7 +641,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       source: 'user',
       durationSec: duration,
       rewardPepe: reward,
-      dailyUserLimit: perAd24hLimit,
+      dailyUserLimit: 1,
       viewsTotal: views,
       viewsCompleted: 0,
       totalCost: cost,
@@ -660,7 +650,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     });
 
     res.json({
-      message: `Your PTC ad "${cleanTitle}" is now live!`,
+      message: `Your PTC ad "${cleanTitle}" is now live (1 claim per user)!`,
       ad: createdAd,
       balance: req.user.balance,
       depositBalance: req.user.depositBalance
@@ -670,7 +660,6 @@ app.post('/api/ads/submit', auth, async (req, res) => {
   }
 });
 
-// --- User Pause / Resume Own Campaign ---
 app.patch('/api/ads/:id/toggle', auth, async (req, res) => {
   try {
     const ad = await Ad.findById(req.params.id);
@@ -694,7 +683,6 @@ app.patch('/api/ads/:id/toggle', auth, async (req, res) => {
   }
 });
 
-// --- User Delete Own Campaign ---
 app.delete('/api/ads/:id', auth, async (req, res) => {
   try {
     const ad = await Ad.findById(req.params.id);
@@ -710,7 +698,7 @@ app.delete('/api/ads/:id', auth, async (req, res) => {
   }
 });
 
-// --- Claim Ad (Per-Ad 24h Limit Check) ---
+// --- Claim Ad: User Promoted Ads = 1 time per user (removed after claim), Admin Ads = Per-Ad 24h Limit ---
 app.post('/api/ads/claim', auth, async (req, res) => {
   try {
     const { adId, adTitle } = req.body;
@@ -724,7 +712,6 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     let title = adTitle || 'Sponsored Ad';
     let adSource = 'admin';
     let foundAd = null;
-    let adLimit = defaultPerAdLimit;
 
     if (adId) {
       foundAd = await Ad.findById(adId);
@@ -739,15 +726,30 @@ app.post('/api/ads/claim', auth, async (req, res) => {
         ? (PTC_TIER_REWARDS[Number(foundAd.durationSec)] || Number(foundAd.rewardPepe) || reward)
         : (Number(foundAd.rewardPepe) || reward);
       title = foundAd.title;
-      adLimit = Math.max(1, Number(foundAd.dailyUserLimit ?? defaultPerAdLimit));
     }
 
-    pruneExpired24hLogs(user, nowMs);
-    const activeAdLogs = adId ? getActive24hLogsForAd(user, String(adId), nowMs) : [];
-    if (adId && activeAdLogs.length >= adLimit) {
-      return res.status(400).json({
-        error: `24h limit of ${adLimit} views reached for "${title}"! Try again after 24 hours.`
+    if (adSource === 'user' && adId) {
+      const alreadyClaimed = Array.isArray(user.claimedUserAds) && user.claimedUserAds.includes(String(adId));
+      if (alreadyClaimed) {
+        return res.status(400).json({ error: 'You have already completed this promoted link once!' });
+      }
+      if (!Array.isArray(user.claimedUserAds)) user.claimedUserAds = [];
+      user.claimedUserAds.push(String(adId));
+      user.markModified('claimedUserAds');
+    } else if (adId) {
+      const adLimit = Math.max(1, Number(foundAd?.dailyUserLimit ?? defaultPerAdLimit));
+      pruneExpired24hLogs(user, nowMs);
+      const activeAdLogs = getActive24hLogsForAd(user, String(adId), nowMs);
+      if (activeAdLogs.length >= adLimit) {
+        return res.status(400).json({
+          error: `24h limit of ${adLimit} views reached for "${title}"! Try again after 24 hours.`
+        });
+      }
+      user.perAdWatchLogs.push({
+        adId: String(adId),
+        watchedAt: now
       });
+      user.markModified('perAdWatchLogs');
     }
 
     if (foundAd) {
@@ -758,33 +760,24 @@ app.post('/api/ads/claim', auth, async (req, res) => {
       await foundAd.save();
     }
 
-    if (adId) {
-      user.perAdWatchLogs.push({
-        adId: String(adId),
-        watchedAt: now
-      });
-      user.markModified('perAdWatchLogs');
-    }
-
     user.balance += reward;
     user.adsWatchedToday = Number(user.adsWatchedToday || 0) + 1;
 
     user.history.unshift({
       type: adSource === 'user' ? 'PTC Ad' : 'View Ad',
-      detail: `${adSource === 'user' ? 'PTC Ad' : 'View Ad'} (${title})`,
+      detail: `${adSource === 'user' ? 'PTC Ad (1/user)' : 'View Ad'} (${title})`,
       amount: reward,
       status: 'Completed'
     });
 
     await user.save();
 
-    const updatedActiveLogs = adId ? getActive24hLogsForAd(user, String(adId), Date.now()) : [];
     res.json({
-      message: `Congratulations! You earned ${reward} PEPE.`,
+      message: adSource === 'user'
+        ? `Completed! Earned ${reward} PEPE. This link is now removed from your list.`
+        : `Congratulations! You earned ${reward} PEPE.`,
       balance: user.balance,
-      adsWatchedToday: user.adsWatchedToday,
-      adWatched24h: updatedActiveLogs.length,
-      adDailyLimit: adLimit
+      adsWatchedToday: user.adsWatchedToday
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to claim ad reward!' });
@@ -829,7 +822,6 @@ app.post('/api/tasks/claim', auth, async (req, res) => {
   }
 });
 
-// --- উইথড্র API (FaucetPay Exact 10 PEPE = 10 PEPE + Binance) ---
 app.post('/api/withdraw', auth, async (req, res) => {
   try {
     const { method, address, network, amount } = req.body;
@@ -1254,7 +1246,6 @@ app.post('/api/admin/withdrawals', requireAdminPin, async (req, res) => {
   }
 });
 
-// --- অ্যাডমিন Approve / Reject করলে ইউজার প্যানেলের History-ও সাথে সাথে আপডেট হবে ---
 app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, res) => {
   try {
     const decision = req.body.decision === 'approved' ? 'approved' : 'rejected';
@@ -1324,12 +1315,10 @@ app.patch('/api/admin/withdrawals/:id/decision', requireAdminPin, async (req, re
   }
 });
 
-// --- Standalone Admin Route ---
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// --- User Frontend Fallback ---
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
