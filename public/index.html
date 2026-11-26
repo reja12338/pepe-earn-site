@@ -109,8 +109,8 @@
           <h2 class="text-2xl font-bold text-blue-400 mt-1"><span id="dashDepositBalance">0</span> PEPE</h2>
         </div>
         <div class="pepe-card p-5 rounded-2xl">
-          <p class="text-slate-400 text-xs">Today's Ad Limit (24 Hours)</p>
-          <h2 class="text-2xl font-bold text-white mt-1"><span id="dashAdsCount">0</span> / <span id="dashAdsLimit">30</span></h2>
+          <p class="text-slate-400 text-xs">Total Ads Claimed (24h)</p>
+          <h2 class="text-2xl font-bold text-white mt-1"><span id="dashAdsCount">0</span> Views</h2>
         </div>
         <div class="pepe-card p-5 rounded-2xl">
           <p class="text-slate-400 text-xs">Total Referrals (<span id="dashRefReward">500</span> PEPE/Ref)</p>
@@ -184,15 +184,15 @@
       </div>
     </section>
 
-    <!-- 2. PTC Ads Option (User Promoted Links - No 24h Limit) -->
+    <!-- 2. PTC Ads Option (User Promoted Links - Individual 24h Limit Per Ad) -->
     <section id="tab-ads" class="hidden space-y-4">
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 class="font-bold text-lg text-white">PTC Ads (User Promoted Links)</h3>
-          <p class="text-xs text-slate-400">Promoted links created by users • No 24h daily limit • Complete the timer to claim</p>
+          <p class="text-xs text-slate-400">Each ad has its own 24h limit • Complete the timer to claim</p>
         </div>
         <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-green-400">
-          Unlimited Daily Views
+          Per-Ad 24h Limit
         </div>
       </div>
 
@@ -200,15 +200,15 @@
       <div id="adsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
     </section>
 
-    <!-- 2B. View Ad Option (Admin Links Only - 24h Daily Limit) -->
+    <!-- 2B. View Ad Option (Admin Links Only - Individual 24h Limit Per Ad) -->
     <section id="tab-viewad" class="hidden space-y-4">
       <div class="pepe-card p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 class="font-bold text-lg text-white">View Ad</h3>
-          <p class="text-xs text-slate-400">Admin featured ads • Click an ad, wait on the ad site, then return and claim</p>
+          <p class="text-xs text-slate-400">Each ad has its own 24h limit (default 30/ad per 24h) • Click an ad, wait on the ad site, then return and claim</p>
         </div>
-        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-sm">
-          24h Limit: <span id="viewAdTabCount" class="text-green-400 font-bold">0</span> / <span id="viewAdTabLimit">30</span>
+        <div class="bg-slate-900 px-4 py-2 rounded-xl border border-slate-700 text-xs font-bold text-green-400">
+          24h Per-Ad Limit Active
         </div>
       </div>
 
@@ -467,9 +467,6 @@
       document.getElementById('advDepositBalance').textContent = depBal;
       document.getElementById('depTabBalance').textContent = depBal;
       document.getElementById('dashAdsCount').textContent = userData.adsWatchedToday;
-      document.getElementById('dashAdsLimit').textContent = userData.dailyAdLimit;
-      document.getElementById('viewAdTabCount').textContent = userData.adsWatchedToday;
-      document.getElementById('viewAdTabLimit').textContent = userData.dailyAdLimit;
       document.getElementById('dashRefCount').textContent = userData.referralCount;
       document.getElementById('dashRefReward').textContent = userData.referralReward;
       document.getElementById('refBadgeReward').textContent = userData.referralReward;
@@ -679,7 +676,7 @@
                 <span class="text-xs px-2 py-0.5 rounded-full font-bold ${isPaused ? 'bg-yellow-500/20 text-yellow-300' : isCompleted ? 'bg-slate-700 text-slate-300' : 'bg-green-500/20 text-green-300'}">${statusLabel}</span>
               </div>
               <h4 class="font-bold text-white mt-1">${ad.title}</h4>
-              <p class="text-xs text-slate-400">Views: ${ad.viewsCompleted || 0}/${ad.viewsTotal || 1} • Timer: ${ad.durationSec}s • Reward: ${ad.rewardPepe} PEPE</p>
+              <p class="text-xs text-slate-400">Views: ${ad.viewsCompleted || 0}/${ad.viewsTotal || 1} • Timer: ${ad.durationSec}s • Reward: ${ad.rewardPepe} PEPE • 24h Limit: ${ad.dailyUserLimit || 30}/24h</p>
             </div>
             <div class="flex gap-2">
               ${!isCompleted ? `
@@ -746,7 +743,7 @@
       `).join('');
     }
 
-    // PTC Ads -> User Promoted Links (No 24h Daily Limit)
+    // PTC Ads -> User Promoted Links (Individual 24h Limit Per Ad)
     function renderAds() {
       const container = document.getElementById('adsContainer');
       const ads = Array.isArray(userData.ptcAds) ? userData.ptcAds : [];
@@ -759,6 +756,9 @@
       container.innerHTML = ads.map(ad => {
         const duration = Number(ad.durationSec) || 10;
         const reward = FIXED_TIME_REWARDS[duration] ?? Number(ad.rewardPepe) ?? 50;
+        const perAdLimit = Math.max(1, Number(ad.dailyUserLimit ?? userData.dailyAdLimit ?? 30));
+        const watched24h = Number(ad.watched24h ?? 0);
+        const limitReached = watched24h >= perAdLimit;
         const safeTitle = encodeURIComponent(ad.title || 'Sponsored Ad');
         const safeUrl = encodeURIComponent(ad.url || '#');
 
@@ -767,13 +767,13 @@
             <div>
               <span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold">${ad.category || 'PTC'}</span>
               <h4 class="font-bold text-white mt-1">${ad.title}</h4>
-              <p class="text-xs text-slate-400 mt-1">Time: ${duration} second • Viewer Rewards: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
+              <p class="text-xs text-slate-400 mt-1">Time: ${duration}s • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span> • 24h Limit: <span class="text-yellow-300 font-bold">${watched24h}/${perAdLimit}</span></p>
             </div>
             <div class="flex gap-2">
-              <button onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
-                View Ad
+              <button ${limitReached ? 'disabled' : ''} onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+                ${limitReached ? '24h Done' : 'View Ad'}
               </button>
-              <button onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
+              <button ${limitReached ? 'disabled' : ''} onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 Claim
               </button>
             </div>
@@ -782,11 +782,10 @@
       }).join('');
     }
 
-    // View Ad -> Admin Ads Only (With 24h Daily Limit)
+    // View Ad -> Admin Ads Only (Individual 24h Limit Per Ad)
     function renderViewAds() {
       const container = document.getElementById('viewAdContainer');
       const ads = Array.isArray(userData.adminAds) ? userData.adminAds : [];
-      const limitReached = userData.adsWatchedToday >= userData.dailyAdLimit;
 
       if (ads.length === 0) {
         container.innerHTML = `<div class="pepe-card p-6 rounded-2xl col-span-full text-center text-slate-400 text-sm">No admin ads have been added yet.</div>`;
@@ -796,6 +795,9 @@
       container.innerHTML = ads.map(ad => {
         const duration = Number(ad.durationSec) || 15;
         const reward = Number(ad.rewardPepe) || Number(userData.adReward) || 100;
+        const perAdLimit = Math.max(1, Number(ad.dailyUserLimit ?? userData.dailyAdLimit ?? 30));
+        const watched24h = Number(ad.watched24h ?? 0);
+        const limitReached = watched24h >= perAdLimit;
         const safeTitle = encodeURIComponent(ad.title || 'Sponsored Ad');
         const safeUrl = encodeURIComponent(ad.url || '#');
 
@@ -804,11 +806,11 @@
             <div>
               <span class="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full font-bold">ADMIN AD</span>
               <h4 class="font-bold text-white mt-1">${ad.title}</h4>
-              <p class="text-xs text-slate-400 mt-1">Duration: ${duration} seconds • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span></p>
+              <p class="text-xs text-slate-400 mt-1">Duration: ${duration}s • Reward: <span class="text-green-400 font-bold">${reward} PEPE</span> • 24h Limit: <span class="text-yellow-300 font-bold">${watched24h}/${perAdLimit}</span></p>
             </div>
             <div class="flex gap-2">
               <button ${limitReached ? 'disabled' : ''} onclick="openAdAndStartTimer('${ad._id}', decodeURIComponent('${safeTitle}'), decodeURIComponent('${safeUrl}'), ${duration}, ${reward})" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
-                ${limitReached ? 'Limit Reached' : 'View Ad'}
+                ${limitReached ? '24h Done' : 'View Ad'}
               </button>
               <button ${limitReached ? 'disabled' : ''} onclick="claimAdById('${ad._id}', decodeURIComponent('${safeTitle}'), ${duration})" class="pepe-btn px-4 py-2 rounded-xl text-xs font-bold text-white whitespace-nowrap">
                 Claim
