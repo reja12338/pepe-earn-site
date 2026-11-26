@@ -312,10 +312,10 @@
 
       <!-- TAB 2: PTC ADS -->
       <section id="tab-ads" class="panel hidden">
-        <h3 style="margin-top:0;">24h Daily Ad Limit, PTC Cost & Balance Transfer Limit</h3>
+        <h3 style="margin-top:0;">Default 24h Per-Ad Limit, PTC Cost & Balance Transfer Limit</h3>
         <div class="grid-2">
           <div>
-            <label for="dailyAdLimitInput">Daily Ad Limit (24 Hours)</label>
+            <label for="dailyAdLimitInput">Default 24h Limit Per Ad (Views / 24h)</label>
             <input id="dailyAdLimitInput" type="number" min="1" value="30" />
           </div>
           <div>
@@ -333,7 +333,7 @@
 
         <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;" />
 
-        <h3 style="margin-top:0;">Create Unlimited PTC Ad</h3>
+        <h3 style="margin-top:0;">Create Unlimited PTC Ad (Individual 24h Limit Per Ad)</h3>
         <form id="adForm" class="grid-2">
           <div>
             <label for="adTitle">Ad Title</label>
@@ -351,8 +351,12 @@
             <label for="adReward">Reward (PEPE)</label>
             <input id="adReward" type="number" min="1" value="25" required />
           </div>
-          <div style="grid-column: 1 / -1;">
-            <button type="submit" class="btn btn-primary">Add PTC Ad</button>
+          <div>
+            <label for="adPerUserLimit">24h Limit For This Ad (Views / 24h)</label>
+            <input id="adPerUserLimit" type="number" min="1" value="30" required />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button type="submit" class="btn btn-primary" style="width:100%;">Add PTC Ad</button>
           </div>
         </form>
         <div id="adsList"></div>
@@ -654,6 +658,7 @@
       document.getElementById('statTasks').textContent = tasks.length;
 
       document.getElementById('dailyAdLimitInput').value = s.dailyAdLimit ?? 30;
+      document.getElementById('adPerUserLimit').value = s.dailyAdLimit ?? 30;
       document.getElementById('ptcAdCreateCostInput').value = s.ptcAdCreateCost ?? 500;
       document.getElementById('minTransferPepeInput').value = s.minTransferPepe ?? 100;
       document.getElementById('signUpBonusInput').value = s.signUpBonus ?? 100;
@@ -686,7 +691,7 @@
       document.getElementById('secIp').value = String(Boolean(s.security?.oneAccountPerIp));
 
       renderWithdrawals(withdrawals);
-      renderAds(ads);
+      renderAds(ads, s.dailyAdLimit ?? 30);
       renderTasks(tasks);
       renderCoupons(coupons);
       renderDeposits(deposits);
@@ -897,7 +902,7 @@
         <div class="list-item">
           <div>
             <strong>${d.username}</strong> • <span style="color:var(--muted);">${d.method || 'Wallet'}${d.usdAmount ? ` ($${d.usdAmount})` : ''}</span><br/>
-            <span style="font-size:13px;">TxID: ${d.txId}</span><br/>
+            <span style="font-size:13px;">Proof / ID: ${d.txId}</span><br/>
             <strong>Amount: ${d.amount} PEPE</strong>
           </div>
           <div class="row" style="margin:0;">
@@ -1044,12 +1049,14 @@
 
     document.getElementById('adForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const defaultLimit = Math.max(1, Number(document.getElementById('dailyAdLimitInput').value) || 30);
       const ad = {
         _id: 'ad_' + Date.now(),
         title: document.getElementById('adTitle').value.trim(),
         url: document.getElementById('adUrl').value.trim(),
         durationSec: Number(document.getElementById('adDuration').value) || 15,
-        rewardPepe: Number(document.getElementById('adReward').value) || 25
+        rewardPepe: Number(document.getElementById('adReward').value) || 25,
+        dailyUserLimit: Math.max(1, Number(document.getElementById('adPerUserLimit').value) || defaultLimit)
       };
 
       const local = readLocal();
@@ -1061,25 +1068,52 @@
       } catch {}
 
       e.target.reset();
+      document.getElementById('adPerUserLimit').value = defaultLimit;
       await loadAll();
       showToast('New PTC ad added');
     });
 
-    function renderAds(items) {
+    window.updateAdLimit = async (id) => {
+      const inputEl = document.getElementById(`ad-limit-${id}`);
+      const nextLimit = Math.max(1, Number(inputEl?.value) || 30);
+
+      const local = readLocal();
+      local.ads = (local.ads || []).map(a => a._id === id ? { ...a, dailyUserLimit: nextLimit } : a);
+      writeLocal(local);
+
+      try {
+        await tryApi(`/api/admin/ads/${id}/limit`, {
+          method: 'PATCH',
+          body: JSON.stringify({ dailyUserLimit: nextLimit })
+        });
+      } catch {}
+
+      await loadAll();
+      showToast(`Ad 24h limit updated to ${nextLimit}`);
+    };
+
+    function renderAds(items, defaultLimit = 30) {
       const box = document.getElementById('adsList');
       if (!items.length) {
         box.innerHTML = '<p style="color:var(--muted);">No PTC ads found.</p>';
         return;
       }
-      box.innerHTML = items.map(a => `
-        <div class="list-item">
-          <div>
-            <strong>${a.title}</strong> (${a.durationSec}s • +${a.rewardPepe} PEPE)<br/>
-            <span style="font-size:12px; color:var(--muted);">${a.url}</span>
+      box.innerHTML = items.map(a => {
+        const limitVal = Math.max(1, Number(a.dailyUserLimit ?? defaultLimit));
+        return `
+          <div class="list-item">
+            <div>
+              <strong>${a.title}</strong> (${a.durationSec}s • +${a.rewardPepe} PEPE • 24h Limit: ${limitVal}/ad)<br/>
+              <span style="font-size:12px; color:var(--muted);">${a.url}</span>
+            </div>
+            <div class="row" style="margin:0;">
+              <input id="ad-limit-${a._id}" type="number" min="1" value="${limitVal}" style="width:90px; padding:7px 9px;" />
+              <button type="button" class="btn btn-info" onclick="updateAdLimit('${a._id}')">Set 24h Limit</button>
+              <button type="button" class="btn btn-danger" onclick="deleteAd('${a._id}')">Delete</button>
+            </div>
           </div>
-          <button type="button" class="btn btn-danger" onclick="deleteAd('${a._id}')">Delete</button>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     window.deleteAd = async (id) => {
