@@ -86,6 +86,7 @@ const adSchema = new mongoose.Schema({
   source: { type: String, enum: ['admin', 'user'], default: 'admin' },
   durationSec: { type: Number, default: 15 },
   rewardPepe: { type: Number, default: 100 },
+  dailyUserLimit: { type: Number, default: 30 },
   viewsTotal: { type: Number, default: 0 },
   viewsCompleted: { type: Number, default: 0 },
   totalCost: { type: Number, default: 0 },
@@ -135,6 +136,10 @@ const userSchema = new mongoose.Schema({
   referralCount: { type: Number, default: 0 },
   adsWatchedToday: { type: Number, default: 0 },
   lastAdReset: { type: Date, default: Date.now },
+  perAdWatchLogs: [{
+    adId: { type: String, required: true },
+    watchedAt: { type: Date, default: Date.now }
+  }],
   lastDailyBonus: { type: Date, default: null },
   completedTasks: [{ type: String }],
   history: [{
@@ -176,6 +181,24 @@ async function ensureDefaultSettings() {
 async function getConfig() {
   await ensureDefaultSettings();
   return Settings.findOne({ key: 'global_config' });
+}
+
+function getActive24hLogsForAd(user, adId, nowMs = Date.now()) {
+  const windowMs = 24 * 60 * 60 * 1000;
+  const logs = Array.isArray(user.perAdWatchLogs) ? user.perAdWatchLogs : [];
+  return logs.filter(item =>
+    String(item.adId) === String(adId) &&
+    (nowMs - new Date(item.watchedAt).getTime()) < windowMs
+  );
+}
+
+function pruneExpired24hLogs(user, nowMs = Date.now()) {
+  const windowMs = 24 * 60 * 60 * 1000;
+  const logs = Array.isArray(user.perAdWatchLogs) ? user.perAdWatchLogs : [];
+  const filtered = logs.filter(item => (nowMs - new Date(item.watchedAt).getTime()) < windowMs);
+  if (filtered.length !== logs.length) {
+    user.perAdWatchLogs = filtered;
+  }
 }
 
 // --- FaucetPay Exact Token Payout Helper ---
@@ -344,7 +367,10 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/user', auth, async (req, res) => {
   const u = req.user;
   const cfg = await getConfig();
-  const [adminAds, ptcAds, myAds, tasks, latestCoupon] = await Promise.all([
+  const defaultPerAdLimit = Math.max(1, Number(cfg?.dailyAdLimit ?? 30));
+  const nowMs = Date.now();
+
+  const [adminAdsRaw, ptcAdsRaw, myAds, tasks, latestCoupon] = await Promise.all([
     Ad.find({ status: 'active', source: { $ne: 'user' } }).sort({ createdAt: -1 }),
     Ad.find({ status: 'active', source: 'user' }).sort({ createdAt: -1 }),
     Ad.find({ createdBy: u.username, source: 'user' }).sort({ createdAt: -1 }),
@@ -352,11 +378,33 @@ app.get('/api/user', auth, async (req, res) => {
     Coupon.findOne({ active: true }).sort({ createdAt: -1 })
   ]);
 
-  const now = Date.now();
+  const mapAdWithPerAdLimit = (adDoc) => {
+    const adObj = adDoc.toObject();
+    const adLimit = Math.max(1, Number(adObj.dailyUserLimit ?? defaultPerAdLimit));
+    const activeLogs = getActive24hLogsForAd(u, adObj._id, nowMs);
+    const watched24h = activeLogs.length;
+    const remaining24h = Math.max(0, adLimit - watched24h);
+    const oldestLog = activeLogs.length > 0
+      ? activeLogs.reduce((min, item) => new Date(item.watchedAt).getTime() < new Date(min.watchedAt).getTime() ? item : min)
+      : null;
+    const resetAt24h = oldestLog ? new Date(oldestLog.watchedAt).getTime() + (24 * 60 * 60 * 1000) : null;
+
+    return {
+      ...adObj,
+      dailyUserLimit: adLimit,
+      watched24h,
+      remaining24h,
+      resetAt24h
+    };
+  };
+
+  const adminAds = adminAdsRaw.map(mapAdWithPerAdLimit);
+  const ptcAds = ptcAdsRaw.map(mapAdWithPerAdLimit);
+
   const lastBonusMs = u.lastDailyBonus ? new Date(u.lastDailyBonus).getTime() : 0;
   const cooldownMs = 24 * 60 * 60 * 1000;
-  const canClaimDailyBonus = !lastBonusMs || (now - lastBonusMs >= cooldownMs);
-  const nextDailyBonusAt = canClaimDailyBonus ? now : lastBonusMs + cooldownMs;
+  const canClaimDailyBonus = !lastBonusMs || (nowMs - lastBonusMs >= cooldownMs);
+  const nextDailyBonusAt = canClaimDailyBonus ? nowMs : lastBonusMs + cooldownMs;
   const couponChannelLink = String(latestCoupon?.channelLink || cfg?.couponChannelLink || '').trim();
 
   res.json({
@@ -382,7 +430,7 @@ app.get('/api/user', auth, async (req, res) => {
     canClaimDailyBonus,
     nextDailyBonusAt,
     adsWatchedToday: u.adsWatchedToday,
-    dailyAdLimit: cfg?.dailyAdLimit ?? 30,
+    dailyAdLimit: defaultPerAdLimit,
     adReward: cfg?.adReward ?? 100,
     adminAds,
     ptcAds,
@@ -528,7 +576,7 @@ app.post('/api/deposit/request', auth, async (req, res) => {
 
     const cleanTx = String(txId || '').trim();
     if (!cleanTx || !Number.isFinite(numAmount) || numAmount <= 0) {
-      return res.status(400).json({ error: 'Please enter a valid amount (USD or PEPE) and transaction ID!' });
+      return res.status(400).json({ error: 'Please enter a valid amount (USD or PEPE) and proof/ID!' });
     }
 
     const refId = 'dep_' + Date.now() + '_' + Math.floor(100 + Math.random() * 900);
@@ -561,7 +609,8 @@ app.post('/api/deposit/request', auth, async (req, res) => {
 // --- User PTC Ad Submit (Fixed Timer -> Fixed Viewer Reward, Strictly from depositBalance) ---
 app.post('/api/ads/submit', auth, async (req, res) => {
   try {
-    const { title, url, category, durationSec, viewsTotal } = req.body;
+    const { title, url, category, durationSec, viewsTotal, dailyUserLimit } = req.body;
+    const cfg = await getConfig();
 
     const cleanTitle = String(title || '').trim();
     const cleanUrl = String(url || '').trim();
@@ -577,6 +626,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
     const reward = PTC_TIER_REWARDS[duration];
     const views = Math.max(1, Number(viewsTotal) || 1);
     const cost = reward * views;
+    const perAd24hLimit = Math.max(1, Number(dailyUserLimit ?? cfg?.dailyAdLimit ?? 30));
 
     const currentDeposit = Number(req.user.depositBalance || 0);
     if (currentDeposit < cost) {
@@ -601,6 +651,7 @@ app.post('/api/ads/submit', auth, async (req, res) => {
       source: 'user',
       durationSec: duration,
       rewardPepe: reward,
+      dailyUserLimit: perAd24hLimit,
       viewsTotal: views,
       viewsCompleted: 0,
       totalCost: cost,
@@ -659,51 +710,64 @@ app.delete('/api/ads/:id', auth, async (req, res) => {
   }
 });
 
-// --- Claim Ad (24h limit ONLY on admin View Ad; no daily limit on user-promoted PTC Ads) ---
+// --- Claim Ad (Per-Ad 24h Limit Check) ---
 app.post('/api/ads/claim', auth, async (req, res) => {
   try {
     const { adId, adTitle } = req.body;
     const user = req.user;
     const cfg = await getConfig();
-    const limit = Number(cfg?.dailyAdLimit) || 30;
+    const defaultPerAdLimit = Math.max(1, Number(cfg?.dailyAdLimit ?? 30));
+    const now = new Date();
+    const nowMs = now.getTime();
 
     let reward = Number(cfg?.adReward) || 100;
     let title = adTitle || 'Sponsored Ad';
     let adSource = 'admin';
+    let foundAd = null;
+    let adLimit = defaultPerAdLimit;
 
     if (adId) {
-      const foundAd = await Ad.findById(adId);
-      if (foundAd) {
-        if (foundAd.status !== 'active') {
-          return res.status(400).json({ error: 'This ad campaign is currently not active!' });
-        }
-        adSource = foundAd.source === 'user' ? 'user' : 'admin';
-        reward = adSource === 'user'
-          ? (PTC_TIER_REWARDS[Number(foundAd.durationSec)] || Number(foundAd.rewardPepe) || reward)
-          : (Number(foundAd.rewardPepe) || reward);
-        title = foundAd.title;
+      foundAd = await Ad.findById(adId);
+      if (!foundAd) {
+        return res.status(404).json({ error: 'Ad campaign not found!' });
       }
+      if (foundAd.status !== 'active') {
+        return res.status(400).json({ error: 'This ad campaign is currently not active!' });
+      }
+      adSource = foundAd.source === 'user' ? 'user' : 'admin';
+      reward = adSource === 'user'
+        ? (PTC_TIER_REWARDS[Number(foundAd.durationSec)] || Number(foundAd.rewardPepe) || reward)
+        : (Number(foundAd.rewardPepe) || reward);
+      title = foundAd.title;
+      adLimit = Math.max(1, Number(foundAd.dailyUserLimit ?? defaultPerAdLimit));
     }
 
-    if (adSource === 'admin' && user.adsWatchedToday >= limit) {
-      return res.status(400).json({ error: `Daily limit of ${limit} ads reached! Try again in 24 hours.` });
+    pruneExpired24hLogs(user, nowMs);
+    const activeAdLogs = adId ? getActive24hLogsForAd(user, String(adId), nowMs) : [];
+    if (adId && activeAdLogs.length >= adLimit) {
+      return res.status(400).json({
+        error: `24h limit of ${adLimit} views reached for "${title}"! Try again after 24 hours.`
+      });
+    }
+
+    if (foundAd) {
+      foundAd.viewsCompleted = Number(foundAd.viewsCompleted || 0) + 1;
+      if (Number(foundAd.viewsTotal || 0) > 0 && foundAd.viewsCompleted >= Number(foundAd.viewsTotal)) {
+        foundAd.status = 'completed';
+      }
+      await foundAd.save();
     }
 
     if (adId) {
-      const foundAd = await Ad.findById(adId);
-      if (foundAd) {
-        foundAd.viewsCompleted = Number(foundAd.viewsCompleted || 0) + 1;
-        if (Number(foundAd.viewsTotal || 0) > 0 && foundAd.viewsCompleted >= Number(foundAd.viewsTotal)) {
-          foundAd.status = 'completed';
-        }
-        await foundAd.save();
-      }
+      user.perAdWatchLogs.push({
+        adId: String(adId),
+        watchedAt: now
+      });
+      user.markModified('perAdWatchLogs');
     }
 
     user.balance += reward;
-    if (adSource === 'admin') {
-      user.adsWatchedToday += 1;
-    }
+    user.adsWatchedToday = Number(user.adsWatchedToday || 0) + 1;
 
     user.history.unshift({
       type: adSource === 'user' ? 'PTC Ad' : 'View Ad',
@@ -713,10 +777,14 @@ app.post('/api/ads/claim', auth, async (req, res) => {
     });
 
     await user.save();
+
+    const updatedActiveLogs = adId ? getActive24hLogsForAd(user, String(adId), Date.now()) : [];
     res.json({
       message: `Congratulations! You earned ${reward} PEPE.`,
       balance: user.balance,
-      adsWatchedToday: user.adsWatchedToday
+      adsWatchedToday: user.adsWatchedToday,
+      adWatched24h: updatedActiveLogs.length,
+      adDailyLimit: adLimit
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to claim ad reward!' });
@@ -990,7 +1058,9 @@ app.patch('/api/admin/deposits/:id/decision', requireAdminPin, async (req, res) 
 
 app.post('/api/admin/ads', requireAdminPin, async (req, res) => {
   try {
-    const { title, url, category, durationSec, rewardPepe, viewsTotal } = req.body;
+    const cfg = await getConfig();
+    const { title, url, category, durationSec, rewardPepe, dailyUserLimit, viewsTotal } = req.body;
+    const defaultLimit = Math.max(1, Number(cfg?.dailyAdLimit ?? 30));
     const ad = await Ad.create({
       title,
       url,
@@ -998,10 +1068,26 @@ app.post('/api/admin/ads', requireAdminPin, async (req, res) => {
       source: 'admin',
       durationSec: Number(durationSec) || 15,
       rewardPepe: Number(rewardPepe) || 100,
+      dailyUserLimit: Math.max(1, Number(dailyUserLimit ?? defaultLimit)),
       viewsTotal: Number(viewsTotal) || 0,
       createdBy: 'admin',
       status: 'active'
     });
+    res.json({ ok: true, ad });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+app.patch('/api/admin/ads/:id/limit', requireAdminPin, async (req, res) => {
+  try {
+    const nextLimit = Math.max(1, Number(req.body.dailyUserLimit) || 30);
+    const ad = await Ad.findByIdAndUpdate(
+      req.params.id,
+      { $set: { dailyUserLimit: nextLimit } },
+      { new: true }
+    );
+    if (!ad) return res.status(404).json({ ok: false, message: 'Ad not found' });
     res.json({ ok: true, ad });
   } catch (err) {
     res.status(500).json({ ok: false, message: err.message });
